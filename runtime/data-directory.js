@@ -71,4 +71,32 @@ function resolveUpdateDirectory(appId, environment = process.env) {
   );
 }
 
-module.exports = { resolveAppId, resolveUpdateDirectory, resolveWebViewDataDirectory };
+function resolveLogDirectory(appId, environment = process.env) {
+  const resolvedAppId = resolveAppId(appId);
+  const directoryName = `${resolveAppDataLabel(resolvedAppId)}-${hashAppId(resolvedAppId)}`;
+  const platform = environment.NODEVIEW_PLATFORM || process.platform;
+  if (platform === "darwin") {
+    return path.join(
+      environment.HOME || os.homedir(),
+      "Library", "Logs", "NodeViewJS", directoryName
+    );
+  }
+  if (platform === "linux") {
+    const stateRoot = environment.XDG_STATE_HOME
+      || path.join(environment.HOME || os.homedir(), ".local", "state");
+    return path.join(stateRoot, "nodeviewjs", directoryName);
+  }
+  return path.join(resolveLocalAppData(environment), "NodeViewJS", "Logs", directoryName);
+}
+
+function resolveLogPath(appId, environment = process.env) {
+  return path.join(resolveLogDirectory(appId, environment), "backend.log");
+}
+
+module.exports = {
+  resolveAppId,
+  resolveLogDirectory,
+  resolveLogPath,
+  resolveUpdateDirectory,
+  resolveWebViewDataDirectory
+};

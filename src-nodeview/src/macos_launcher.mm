@@ -46,7 +46,7 @@ int main(int, char**) {
     }
     NSString* log_path = [logs stringByAppendingPathComponent:
         [app_name stringByAppendingPathExtension:@"log"]];
-    const int log_file = open(log_path.fileSystemRepresentation, O_CREAT | O_WRONLY | O_TRUNC, 0644);
+    const int log_file = open(log_path.fileSystemRepresentation, O_CREAT | O_WRONLY | O_APPEND, 0644);
     if (log_file < 0) return ShowLaunchError(@"The application log file could not be created.");
 
     const std::string launcher_path(bundle.executablePath.fileSystemRepresentation);

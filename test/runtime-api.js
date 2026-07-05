@@ -14,7 +14,11 @@ const {
   COMMAND_PERMISSIONS,
   PERMISSION_GROUPS
 } = require("../runtime/app");
-const { resolveUpdateDirectory, resolveWebViewDataDirectory } = require("../runtime/data-directory");
+const {
+  resolveLogPath,
+  resolveUpdateDirectory,
+  resolveWebViewDataDirectory
+} = require("../runtime/data-directory");
 const { isFrontendFile, startDevWatcher } = require("../runtime/dev-watcher");
 const {
   findLaunchTargets,
@@ -165,6 +169,7 @@ if (process.platform === "win32") {
   );
 }
 assert.ok(app.mainWindow instanceof AppWindow);
+assert.match(app.logPath, /backend\.log$/);
 assert.ok(secondaryWindow instanceof AppWindow);
 assert.deepEqual(app.windows, [app.mainWindow, secondaryWindow]);
 assert.equal(secondaryWindow.options.title, "Secondary");
@@ -292,8 +297,16 @@ assert.match(
   /nodeview-local-app-data[\\/]NodeViewJS[\\/]Updates[\\/]My-App-[0-9a-f]{16}$/
 );
 assert.match(
+  resolveLogPath("My App", windowsDataEnvironment),
+  /nodeview-local-app-data[\\/]NodeViewJS[\\/]Logs[\\/]My-App-[0-9a-f]{16}[\\/]backend\.log$/
+);
+assert.match(
   resolveWebViewDataDirectory("My App", { HOME: "C:\\Users\\Test", NODEVIEW_PLATFORM: "darwin" }),
   /Library[\\/]Application Support[\\/]NodeViewJS[\\/]My-App-[0-9a-f]{16}[\\/]WebKit$/
+);
+assert.match(
+  resolveLogPath("My App", { HOME: "C:\\Users\\Test", NODEVIEW_PLATFORM: "darwin" }),
+  /Library[\\/]Logs[\\/]NodeViewJS[\\/]My-App-[0-9a-f]{16}[\\/]backend\.log$/
 );
 const linuxDataEnvironment = {
   HOME: path.join(os.tmpdir(), "nodeview-home"),
@@ -306,6 +319,10 @@ assert.match(
 assert.match(
   resolveUpdateDirectory("My App", linuxDataEnvironment),
   /nodeview-home[\\/]\.local[\\/]share[\\/]NodeViewJS[\\/]Updates[\\/]My-App-[0-9a-f]{16}$/
+);
+assert.match(
+  resolveLogPath("My App", linuxDataEnvironment),
+  /nodeview-home[\\/]\.local[\\/]state[\\/]nodeviewjs[\\/]My-App-[0-9a-f]{16}[\\/]backend\.log$/
 );
 const linuxXdgDirectory = path.join(os.tmpdir(), "nodeview-xdg-data");
 assert.match(

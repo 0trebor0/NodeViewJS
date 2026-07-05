@@ -47,7 +47,7 @@ int main() {
     return 1;
   }
   const std::filesystem::path log_path = logs / (executable.filename().string() + ".log");
-  const int log_file = open(log_path.c_str(), O_CREAT | O_WRONLY | O_TRUNC, 0644);
+  const int log_file = open(log_path.c_str(), O_CREAT | O_WRONLY | O_APPEND, 0644);
   if (log_file < 0) return 1;
 
   const std::string launcher_path = executable.string();

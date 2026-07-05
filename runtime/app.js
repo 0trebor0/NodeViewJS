@@ -6,6 +6,7 @@ const { performance } = require("node:perf_hooks");
 
 const { resolveAppId, resolveWebViewDataDirectory } = require("./data-directory");
 const { startDevWatcher } = require("./dev-watcher");
+const { createErrorLogger } = require("./error-logger");
 const ipc = require("./ipc");
 const { findLaunchTargets, resolveLaunchConfiguration } = require("./launch-routing");
 const { normalizeContextPosition, normalizeMenuTemplate } = require("./menu");
@@ -525,6 +526,7 @@ class AppWindow {
       if (typeof native().setMenuHandler === "function") {
         native().setMenuHandler(id, (event) => {
           this.#app._handleMenuCommand(this, event).catch((error) => {
+            this.#app._reportError("Menu handler failed", error);
             console.error(`[NodeViewJS menu] ${error.stack ?? error}`);
           });
         });
@@ -544,7 +546,12 @@ class AppWindow {
 
   async _dispatch(eventName, payload) {
     for (const handler of [...this.#eventHandlers.get(eventName) ?? []]) {
-      await handler(payload);
+      try {
+        await handler(payload);
+      } catch (error) {
+        this.#app._reportError(`Window event '${eventName}' failed`, error);
+        throw error;
+      }
     }
   }
 
@@ -558,6 +565,7 @@ class AppWindow {
 
 class App {
   #commands = new Map();
+  #errorLogger;
   #eventHandlers = new Map();
   #hasRun = false;
   #ipcRequestStates = new WeakMap();
@@ -575,6 +583,7 @@ class App {
       throw new TypeError("App options must be an object.");
     }
     this.options = resolveWindowOptions(options, {}, "App");
+    this.#errorLogger = createErrorLogger(this.options.appId);
     this.#launchConfiguration = resolveLaunchConfiguration(options);
     this.options.protocols = this.#launchConfiguration.protocols;
     this.options.fileAssociations = this.#launchConfiguration.fileAssociations;
@@ -585,6 +594,10 @@ class App {
 
   get mainWindow() {
     return this.#mainWindow;
+  }
+
+  get logPath() {
+    return this.#errorLogger.logPath;
   }
 
   get windows() {
@@ -712,8 +725,13 @@ class App {
       }
     } catch (error) {
       for (const off of eventUnsubscribers.reverse()) off();
-      try { cleanup?.(); } catch {}
+      try {
+        cleanup?.();
+      } catch (cleanupError) {
+        this._reportError(`Plugin '${plugin.name}' rollback cleanup failed`, cleanupError);
+      }
       state.active = false;
+      this._reportError(`Plugin '${plugin.name}' setup failed`, error);
       throw error;
     } finally {
       state.setupOpen = false;
@@ -813,11 +831,16 @@ class App {
   }
 
   run() {
+    this.#errorLogger.install();
     if (this.#hasRun) {
-      throw new Error("app.run() may only be called once.");
+      const error = new Error("app.run() may only be called once.");
+      this._reportError("Application startup failed", error);
+      throw error;
     }
     if (!fs.existsSync(this.options.entry)) {
-      throw new Error(`App entry file was not found: ${this.options.entry}`);
+      const error = new Error(`App entry file was not found: ${this.options.entry}`);
+      this._reportError("Application startup failed", error);
+      throw error;
     }
 
     if (this.options.singleInstance) {
@@ -825,11 +848,15 @@ class App {
       const request = this.#singleInstance.request(
         { args: process.argv.slice(2), cwd: process.cwd() },
         (payload) => this.#handleSecondInstance(payload),
-        (error) => console.error(`[NodeViewJS single instance] ${error.stack ?? error}`)
+        (error) => {
+          this._reportError("Single-instance server failed", error);
+          console.error(`[NodeViewJS single instance] ${error.stack ?? error}`);
+        }
       );
       if (!request.primary) {
         this.#hasRun = true;
         request.forwarded.catch((error) => {
+          this._reportError("Single-instance forwarding failed", error);
           console.error(`[NodeViewJS single instance] ${error.stack ?? error}`);
           process.exitCode = 1;
         });
@@ -845,6 +872,7 @@ class App {
       this.#startPlugins();
       native().run();
     } catch (error) {
+      this._reportError("Application startup failed", error);
       this.#singleInstance?.close();
       this.#singleInstance = undefined;
       try { this.#stopPlugins(); } catch {}
@@ -860,7 +888,10 @@ class App {
     const initialCwd = process.cwd();
     queueMicrotask(() => {
       this.#routeLaunchArguments(initialArgs, initialCwd, true).catch(
-        (error) => console.error(`[NodeViewJS launch routing] ${error.stack ?? error}`)
+        (error) => {
+          this._reportError("Initial launch routing failed", error);
+          console.error(`[NodeViewJS launch routing] ${error.stack ?? error}`);
+        }
       );
     });
     return true;
@@ -874,6 +905,7 @@ class App {
     native().closeAllWindows();
     this.#singleInstance?.close();
     this.#singleInstance = undefined;
+    this.#errorLogger.dispose();
     if (pluginError) throw pluginError;
   }
 
@@ -946,7 +978,12 @@ class App {
 
   async #dispatchAppEvent(eventName, payload) {
     for (const handler of [...this.#eventHandlers.get(eventName) ?? []]) {
-      await handler(payload);
+      try {
+        await handler(payload);
+      } catch (error) {
+        this._reportError(`App event '${eventName}' failed`, error);
+        throw error;
+      }
     }
   }
 
@@ -966,6 +1003,7 @@ class App {
       try {
         assertSynchronousHookResult(record.plugin.stop?.(record.context), "stop");
       } catch (error) {
+        this._reportError(`Plugin '${record.metadata.name}' stop failed`, error);
         firstError ??= error;
       }
     }
@@ -982,6 +1020,7 @@ class App {
       try {
         assertSynchronousHookResult(record.cleanup?.(), "cleanup");
       } catch (error) {
+        this._reportError(`Plugin '${record.metadata.name}' cleanup failed`, error);
         firstError ??= error;
       }
     }
@@ -1005,6 +1044,10 @@ class App {
         await handler(message.payload);
       }
     }
+  }
+
+  _reportError(context, error) {
+    this.#errorLogger.report(context, error);
   }
 
   async _handleMenuCommand(window, event) {
@@ -1064,7 +1107,12 @@ class App {
       });
       let result;
       try {
-        result = await Promise.race([command.handler(message.payload), timeoutPromise]);
+        try {
+          result = await Promise.race([command.handler(message.payload), timeoutPromise]);
+        } catch (error) {
+          this._reportError(`IPC command '${message.command}' failed`, error);
+          throw error;
+        }
       } finally {
         clearTimeout(timeout);
       }

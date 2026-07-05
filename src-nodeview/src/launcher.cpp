@@ -369,9 +369,10 @@ void ReportError(
       (log_attributes == INVALID_FILE_ATTRIBUTES ||
         !(log_attributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT)));
   HANDLE log = safe_log ? CreateFileW(
-      log_path.c_str(), GENERIC_WRITE, FILE_SHARE_READ, nullptr, CREATE_ALWAYS,
+      log_path.c_str(), GENERIC_WRITE, FILE_SHARE_READ, nullptr, OPEN_ALWAYS,
       FILE_ATTRIBUTE_NORMAL, nullptr) : INVALID_HANDLE_VALUE;
   if (log != INVALID_HANDLE_VALUE) {
+    SetFilePointer(log, 0, nullptr, FILE_END);
     const int length = WideCharToMultiByte(
         CP_UTF8, 0, message.data(), static_cast<int>(message.size()), nullptr, 0, nullptr, nullptr);
     if (length > 0) {
@@ -433,9 +434,10 @@ int WINAPI wWinMain(
   security.nLength = sizeof(security);
   security.bInheritHandle = TRUE;
   HANDLE log_file = CreateFileW(
-      log_path.c_str(), GENERIC_WRITE, FILE_SHARE_READ, &security, CREATE_ALWAYS,
+      log_path.c_str(), GENERIC_WRITE, FILE_SHARE_READ, &security, OPEN_ALWAYS,
       FILE_ATTRIBUTE_NORMAL, nullptr);
   if (log_file == INVALID_HANDLE_VALUE) return 1;
+  SetFilePointer(log_file, 0, nullptr, FILE_END);
 
   STARTUPINFOW startup{};
   startup.cb = sizeof(startup);

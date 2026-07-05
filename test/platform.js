@@ -176,6 +176,8 @@ const windowsShell = fs.readFileSync(path.join(root, "src-nodeview", "src", "she
 const windowsClipboard = fs.readFileSync(path.join(root, "src-nodeview", "src", "clipboard.cpp"), "utf8");
 const windowsSingleInstance = fs.readFileSync(path.join(root, "src-nodeview", "src", "single_instance.cpp"), "utf8");
 const windowsLauncher = fs.readFileSync(path.join(root, "src-nodeview", "src", "launcher.cpp"), "utf8");
+const macLauncher = fs.readFileSync(path.join(root, "src-nodeview", "src", "macos_launcher.mm"), "utf8");
+const linuxLauncher = fs.readFileSync(path.join(root, "src-nodeview", "src", "linux_launcher.cpp"), "utf8");
 const associationNormalizer = path.join(root, "scripts", "normalize-associations.js");
 const windowsHost = fs.readFileSync(path.join(root, "src-nodeview", "src", "window.cpp"), "utf8");
 const windowsWebView = fs.readFileSync(path.join(root, "src-nodeview", "src", "webview.cpp"), "utf8");
@@ -231,6 +233,9 @@ assert.match(windowsSingleInstance, /ERROR_ALREADY_EXISTS/);
 assert.match(windowsLauncher, /FindResourceW/);
 assert.match(windowsLauncher, /BCryptOpenAlgorithmProvider/);
 assert.match(windowsLauncher, /VerifyIntegrity/);
+assert.match(windowsLauncher, /OPEN_ALWAYS/);
+assert.match(macLauncher, /O_APPEND/);
+assert.match(linuxLauncher, /O_APPEND/);
 assert.ok(binding.conditions.some(([condition, settings]) =>
   condition === "OS=='win'" && settings.targets.some(
     (target) => target.target_name === "nodeview_launcher" && target.libraries.includes("bcrypt.lib")
