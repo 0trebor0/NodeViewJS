@@ -178,4 +178,26 @@ function normalizeContextPosition(value = {}) {
   return Object.freeze({ x: value.x, y: value.y });
 }
 
-module.exports = { normalizeAccelerator, normalizeContextPosition, normalizeMenuTemplate };
+function normalizeTrayMenuTemplate(value, { allowNull = false } = {}) {
+  const template = normalizeMenuTemplate(value, { allowNull });
+  if (template === null) return null;
+
+  function rejectAccelerators(items) {
+    for (const item of items) {
+      if (item.accelerator !== undefined) {
+        throw new TypeError("Tray menu items cannot use accelerators.");
+      }
+      if (item.submenu) rejectAccelerators(item.submenu);
+    }
+  }
+
+  rejectAccelerators(template);
+  return template;
+}
+
+module.exports = {
+  normalizeAccelerator,
+  normalizeContextPosition,
+  normalizeMenuTemplate,
+  normalizeTrayMenuTemplate
+};

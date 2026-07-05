@@ -859,7 +859,7 @@ Unspecified secondary-window options inherit from the main window. Each window h
 
 ### System tray
 
-Add a basic system tray icon with:
+Add a system tray icon with either the default Show/Quit menu or a custom declarative menu:
 
 ```js
 const app = new App({
@@ -868,12 +868,24 @@ const app = new App({
   closeToHide: true,
   tray: {
     title: "My App",
-    icon: "assets/app.ico"
+    icon: "assets/app.ico",
+    menu: [
+      { id: "tray.show", label: "Show" },
+      { id: "tray.enabled", label: "Enabled", type: "checkbox", checked: true },
+      { type: "separator" },
+      { id: "tray.quit", label: "Quit" }
+    ]
   }
+});
+
+app.on("tray-menu", ({ id, checked }) => {
+  if (id === "tray.show") app.show();
+  if (id === "tray.quit") app.quit();
+  if (id === "tray.enabled") console.log("Enabled:", checked);
 });
 ```
 
-The tray icon uses a simple native menu with Show and Quit. Double-clicking the tray icon shows the app window.
+Omit `tray.menu`, or set it to `null`, to use the built-in Show and Quit items. A custom menu replaces those defaults and supports normal items, checkboxes, separators, disabled items, and submenus. Tray accelerators are rejected because tray menus are not active while the app is unfocused. Double-clicking the tray icon always shows the app window.
 
 ### Native application menus
 

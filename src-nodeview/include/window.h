@@ -41,7 +41,11 @@ class NativeWindow {
   void SetApplicationMenu(const Napi::Value& menu_template);
   void ShowContextMenu(const Napi::Array& menu_template, const Napi::Object& position);
   bool TranslateAcceleratorMessage(MSG* message);
-  void DispatchMenuCommand(const std::string& id, bool checkbox, bool checked);
+  void DispatchMenuCommand(
+      const std::string& id,
+      bool checkbox,
+      bool checked,
+      const char* source = "application");
   void ClearMenuHandler();
   void SetTaskbarProgress(Napi::Env env, double value, const std::string& state);
   void SetTaskbarOverlay(Napi::Env env, const std::wstring& icon_path, const std::wstring& description);

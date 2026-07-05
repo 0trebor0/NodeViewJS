@@ -49,6 +49,7 @@
     "test:bundle": "node test/runtime-bundle.js",
     "test:menu": "node test/menu.js",
     "test:menu-native": "powershell -NoProfile -ExecutionPolicy Bypass -File test/menu-native.ps1",
+    "test:tray-menu-native": "powershell -NoProfile -ExecutionPolicy Bypass -File test/tray-menu-native.ps1",
     "test:taskbar": "node test/taskbar.js",
     "test:taskbar-native": "powershell -NoProfile -ExecutionPolicy Bypass -File test/taskbar-native.ps1",
     "test:notification": "node test/notification.js",

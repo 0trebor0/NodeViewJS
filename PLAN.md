@@ -120,7 +120,7 @@ macOS and Linux security-parity work is deferred for now, and each cross-platfor
 - `app.show()` and `app.hide()` support restoring windows hidden by `closeToHide`.
 - Optional startup timing logs help measure launch overhead during development.
 - `notification.show()`, `app.showNotification()`, and `window.showNotification()` display validated native Windows notifications using an app-specific Windows identity, the app icon, current notification-icon protocol, Explorer-restart recovery, and click-to-restore behavior.
-- `tray` app options and `app.setTray()` add a basic system tray icon with Show and Quit actions.
+- `tray` app options and `app.setTray()` add a system tray icon with default Show/Quit actions or validated custom menu items, checkboxes, separators, disabled items, submenus, and `tray-menu` events.
 - `dialog.openFile()` and `dialog.saveFile()` provide native open/save file pickers.
 - Top-level WebView navigation is restricted to the local app directory; remote and outside-file navigations are blocked.
 - Native window teardown balances COM, timer, and icon ownership and allows a clean retry after failed window creation.

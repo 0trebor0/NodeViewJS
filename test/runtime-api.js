@@ -428,6 +428,18 @@ assert.throws(
 
 assert.equal(trayApp.setTray({ title: "Tray Test" }), trayApp);
 assert.equal(trayApp.options.tray.title, "Tray Test");
+assert.equal(trayApp.setTray({
+  menu: [
+    { id: "tray.show", label: "Show" },
+    { type: "separator" },
+    { id: "tray.quit", label: "Quit" }
+  ]
+}), trayApp);
+assert.equal(trayApp.options.tray.menu[0].id, "tray.show");
+assert.equal(trayApp.setTray({ title: "Updated Tray" }), trayApp);
+assert.equal(trayApp.options.tray.menu[2].id, "tray.quit");
+assert.equal(trayApp.setTray({ menu: null }), trayApp);
+assert.equal(trayApp.options.tray.menu, null);
 assert.equal(trayApp.setMenu([{ id: "tray.menu", label: "Menu" }]), trayApp);
 
 assert.throws(

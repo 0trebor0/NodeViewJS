@@ -4,7 +4,8 @@ const assert = require("node:assert/strict");
 const {
   normalizeAccelerator,
   normalizeContextPosition,
-  normalizeMenuTemplate
+  normalizeMenuTemplate,
+  normalizeTrayMenuTemplate
 } = require("../runtime/menu");
 
 assert.deepEqual(normalizeAccelerator("control+shift+s"), {
@@ -38,6 +39,8 @@ assert.equal(template[0].submenu[0].accelerator.display, "Ctrl+O");
 assert.equal(template[0].submenu[2].checked, true);
 assert.equal(Object.isFrozen(template), true);
 assert.equal(normalizeMenuTemplate(null, { allowNull: true }), null);
+assert.equal(normalizeTrayMenuTemplate(null, { allowNull: true }), null);
+assert.equal(normalizeTrayMenuTemplate([{ id: "show", label: "Show" }])[0].id, "show");
 assert.deepEqual(normalizeContextPosition(), {});
 assert.deepEqual(normalizeContextPosition({ x: 10, y: -5 }), { x: 10, y: -5 });
 
@@ -45,6 +48,10 @@ assert.throws(() => normalizeAccelerator("A"), /require Ctrl, Alt, or Shift/);
 assert.throws(() => normalizeAccelerator("Ctrl+Ctrl+A"), /Duplicate accelerator modifier/);
 assert.throws(() => normalizeAccelerator("Ctrl+Unknown"), /Unsupported menu accelerator key/);
 assert.throws(() => normalizeMenuTemplate({}), /must be an array/);
+assert.throws(
+  () => normalizeTrayMenuTemplate([{ id: "show", label: "Show", accelerator: "Ctrl+S" }]),
+  /cannot use accelerators/
+);
 assert.throws(() => normalizeMenuTemplate([]), /at least one item/);
 assert.throws(() => normalizeContextPosition({ x: 1 }), /requires both x and y/);
 assert.throws(() => normalizeContextPosition({ x: 1, y: 2, screen: true }), /Unsupported context/);

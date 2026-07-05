@@ -13,7 +13,11 @@ const { startDevWatcher } = require("./dev-watcher");
 const { createErrorLogger } = require("./error-logger");
 const ipc = require("./ipc");
 const { findLaunchTargets, resolveLaunchConfiguration } = require("./launch-routing");
-const { normalizeContextPosition, normalizeMenuTemplate } = require("./menu");
+const {
+  normalizeContextPosition,
+  normalizeMenuTemplate,
+  normalizeTrayMenuTemplate
+} = require("./menu");
 const { normalizeNotificationOptions } = require("./notification");
 const { SingleInstanceCoordinator } = require("./single-instance");
 const { normalizeAttentionType, normalizeOverlay, normalizeProgress } = require("./taskbar");
@@ -189,14 +193,15 @@ function resolvePermissions(options) {
   };
 }
 
-function resolveTrayOptions(options, fallbackTitle, fallbackIcon) {
+function resolveTrayOptions(options, fallbackTitle, fallbackIcon, fallbackMenu) {
   if (options === undefined || options === false) {
     return undefined;
   }
   if (options === true) {
     return {
       title: fallbackTitle,
-      icon: fallbackIcon && path.resolve(fallbackIcon)
+      icon: fallbackIcon && path.resolve(fallbackIcon),
+      menu: fallbackMenu
     };
   }
   if (!options || typeof options !== "object" || Array.isArray(options)) {
@@ -213,9 +218,14 @@ function resolveTrayOptions(options, fallbackTitle, fallbackIcon) {
     throw new TypeError("Tray icon must be a string.");
   }
 
+  const menu = options.menu === undefined
+    ? fallbackMenu
+    : normalizeTrayMenuTemplate(options.menu, { allowNull: true });
+
   return {
     title,
-    icon: icon && path.resolve(icon)
+    icon: icon && path.resolve(icon),
+    menu
   };
 }
 
@@ -493,7 +503,12 @@ class AppWindow {
   }
 
   setTray(options = {}) {
-    const tray = resolveTrayOptions(options, this.options.title, this.options.icon);
+    const tray = resolveTrayOptions(
+      options,
+      this.options.title,
+      this.options.icon,
+      this.options.tray?.menu
+    );
     if (!tray) throw new TypeError("Tray options must be an object or true.");
     this.options.tray = tray;
     if (this.#id !== undefined) native().setTray(this.#id, tray);
@@ -933,12 +948,7 @@ class App {
   }
 
   setTray(options = {}) {
-    const tray = resolveTrayOptions(options, this.options.title, this.options.icon);
-    if (!tray) {
-      throw new TypeError("Tray options must be an object or true.");
-    }
-
-    this.#mainWindow.setTray(tray);
+    this.#mainWindow.setTray(options);
     return this;
   }
 
@@ -1073,8 +1083,9 @@ class App {
     const payload = event.checked === undefined
       ? { id: event.id, window }
       : { id: event.id, checked: Boolean(event.checked), window };
-    await window._dispatch("menu", payload);
-    await this.#dispatchAppEvent("menu", payload);
+    const eventName = event.source === "tray" ? "tray-menu" : "menu";
+    await window._dispatch(eventName, payload);
+    await this.#dispatchAppEvent(eventName, payload);
   }
 
   async #invoke(window, message) {

@@ -51,9 +51,11 @@ struct WindowState {
   bool tray_icon_added = false;
   HICON window_icon = nullptr;
   HICON tray_icon = nullptr;
+  HMENU tray_menu = nullptr;
   HMENU application_menu = nullptr;
   HACCEL accelerator_table = nullptr;
   std::map<UINT, MenuCommand> menu_commands;
+  std::map<UINT, MenuCommand> tray_menu_commands;
   std::string taskbar_progress_state = "none";
   double taskbar_progress_value = 0;
   bool taskbar_overlay = false;
@@ -79,6 +81,8 @@ constexpr UINT kTrayShowCommand = 1001;
 constexpr UINT kTrayQuitCommand = 1002;
 constexpr UINT kFirstMenuCommand = 2000;
 constexpr UINT kLastMenuCommand = 0xefff;
+constexpr UINT kFirstTrayMenuCommand = 0xf000;
+constexpr UINT kLastTrayMenuCommand = 0xffef;
 constexpr COLORREF kTransparentColorKey = RGB(1, 0, 1);
 constexpr int kHoverFrameRevealHeight = 8;
 
@@ -187,6 +191,15 @@ void ClearApplicationMenu(nodeview::NativeWindow& native_window) {
   state.menu_commands.clear();
 }
 
+void ClearTrayMenu(nodeview::NativeWindow& native_window) {
+  auto& state = native_window.State();
+  if (state.tray_menu != nullptr) {
+    DestroyMenu(state.tray_menu);
+    state.tray_menu = nullptr;
+  }
+  state.tray_menu_commands.clear();
+}
+
 void ShowAppWindow(nodeview::NativeWindow& native_window) {
   auto& state = native_window.State();
   if (state.window == nullptr) {
@@ -210,19 +223,19 @@ void ShowTrayMenu(nodeview::NativeWindow& native_window) {
     return;
   }
 
-  HMENU menu = CreatePopupMenu();
-  if (menu == nullptr) {
-    return;
+  const bool custom_menu = state.tray_menu != nullptr;
+  HMENU menu = custom_menu ? state.tray_menu : CreatePopupMenu();
+  if (menu == nullptr) return;
+  if (!custom_menu) {
+    AppendMenu(menu, MF_STRING, kTrayShowCommand, L"Show");
+    AppendMenu(menu, MF_STRING, kTrayQuitCommand, L"Quit");
   }
-
-  AppendMenu(menu, MF_STRING, kTrayShowCommand, L"Show");
-  AppendMenu(menu, MF_STRING, kTrayQuitCommand, L"Quit");
 
   POINT cursor{};
   GetCursorPos(&cursor);
   SetForegroundWindow(state.window);
   TrackPopupMenu(menu, TPM_RIGHTBUTTON, cursor.x, cursor.y, 0, state.window, nullptr);
-  DestroyMenu(menu);
+  if (!custom_menu) DestroyMenu(menu);
 }
 
 LRESULT CALLBACK WindowProcedure(HWND window, UINT message, WPARAM w_param, LPARAM l_param) {
@@ -242,6 +255,7 @@ LRESULT CALLBACK WindowProcedure(HWND window, UINT message, WPARAM w_param, LPAR
   switch (message) {
     case WM_DESTROY: {
       ClearApplicationMenu(*native_window);
+      ClearTrayMenu(*native_window);
       native_window->ClearMenuHandler();
       if (state.notification_icon_added) {
         RemoveNotifyIcon(*native_window, kNotificationIconId);
@@ -344,6 +358,22 @@ LRESULT CALLBACK WindowProcedure(HWND window, UINT message, WPARAM w_param, LPAR
             command->second.checked);
         return 0;
       }
+      if (const auto command = state.tray_menu_commands.find(LOWORD(w_param));
+          command != state.tray_menu_commands.end()) {
+        if (command->second.checkbox) {
+          command->second.checked = !command->second.checked;
+          CheckMenuItem(
+              state.tray_menu,
+              command->first,
+              MF_BYCOMMAND | (command->second.checked ? MF_CHECKED : MF_UNCHECKED));
+        }
+        native_window->DispatchMenuCommand(
+            command->second.id,
+            command->second.checkbox,
+            command->second.checked,
+            "tray");
+        return 0;
+      }
       return DefWindowProc(window, message, w_param, l_param);
     case kTrayCallbackMessage:
       if (l_param == WM_LBUTTONDBLCLK) {
@@ -440,7 +470,8 @@ void AppendMenuItems(
     const Napi::Array& items,
     std::map<UINT, nodeview::MenuCommand>& commands,
     std::vector<ACCEL>& accelerators,
-    UINT& next_command) {
+    UINT& next_command,
+    UINT last_command = kLastMenuCommand) {
   for (std::uint32_t index = 0; index < items.Length(); ++index) {
     const Napi::Value value = items.Get(index);
     if (!value.IsObject() || value.IsArray()) {
@@ -473,7 +504,8 @@ void AppendMenuItems(
             submenu_value.As<Napi::Array>(),
             commands,
             accelerators,
-            next_command);
+            next_command,
+            last_command);
       } catch (...) {
         DestroyMenu(submenu);
         throw;
@@ -489,7 +521,7 @@ void AppendMenuItems(
       continue;
     }
 
-    if (next_command > kLastMenuCommand) {
+    if (next_command > last_command) {
       throw Napi::RangeError::New(items.Env(), "Native menu contains too many commands.");
     }
     const UINT command_id = next_command++;
@@ -998,12 +1030,14 @@ bool NativeWindow::TranslateAcceleratorMessage(MSG* message) {
 void NativeWindow::DispatchMenuCommand(
     const std::string& id,
     bool checkbox,
-    bool checked) {
+    bool checked,
+    const char* source) {
   if (menu_handler_.IsEmpty() || menu_env_ == nullptr) return;
   const Napi::Env env(menu_env_);
   Napi::HandleScope scope(env);
   Napi::Object event = Napi::Object::New(env);
   event.Set("id", Napi::String::New(env, id));
+  event.Set("source", Napi::String::New(env, source));
   if (checkbox) event.Set("checked", Napi::Boolean::New(env, checked));
   menu_handler_.Call({event});
 }
@@ -1104,11 +1138,38 @@ void NativeWindow::SetTray(const Napi::Object& options) {
   const std::wstring title = GetRequiredString(options, "title");
   const std::wstring icon_path = GetOptionalString(options, "icon");
 
+  HMENU new_menu = nullptr;
+  std::map<UINT, MenuCommand> new_commands;
+  const Napi::Value menu_value = options.Get("menu");
+  if (menu_value.IsArray()) {
+    new_menu = CreatePopupMenu();
+    if (new_menu == nullptr) {
+      throw Napi::Error::New(env, "Could not create the native tray menu.");
+    }
+    std::vector<ACCEL> ignored_accelerators;
+    UINT next_command = kFirstTrayMenuCommand;
+    try {
+      AppendMenuItems(
+          new_menu,
+          menu_value.As<Napi::Array>(),
+          new_commands,
+          ignored_accelerators,
+          next_command,
+          kLastTrayMenuCommand);
+    } catch (...) {
+      DestroyMenu(new_menu);
+      throw;
+    }
+  } else if (!menu_value.IsUndefined() && !menu_value.IsNull()) {
+    throw Napi::TypeError::New(env, "Tray menu must be an array or null.");
+  }
+
   HICON icon = LoadIcon(nullptr, IDI_APPLICATION);
   HICON loaded_icon = nullptr;
   if (!icon_path.empty()) {
     loaded_icon = static_cast<HICON>(LoadImage(nullptr, icon_path.c_str(), IMAGE_ICON, 0, 0, LR_LOADFROMFILE));
     if (loaded_icon == nullptr) {
+      if (new_menu != nullptr) DestroyMenu(new_menu);
       throw Napi::Error::New(env, "Could not load the tray icon. Use a valid .ico file path.");
     }
     icon = loaded_icon;
@@ -1125,6 +1186,7 @@ void NativeWindow::SetTray(const Napi::Object& options) {
 
   const DWORD action = g_state.tray_icon_added ? NIM_MODIFY : NIM_ADD;
   if (!Shell_NotifyIcon(action, &tray)) {
+    if (new_menu != nullptr) DestroyMenu(new_menu);
     if (loaded_icon != nullptr) {
       DestroyIcon(loaded_icon);
     }
@@ -1135,6 +1197,9 @@ void NativeWindow::SetTray(const Napi::Object& options) {
     DestroyIcon(g_state.tray_icon);
   }
   g_state.tray_icon = loaded_icon;
+  ClearTrayMenu(*this);
+  g_state.tray_menu = new_menu;
+  g_state.tray_menu_commands = std::move(new_commands);
   g_state.tray_icon_added = true;
 }
 
