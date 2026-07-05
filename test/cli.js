@@ -106,7 +106,7 @@ app.run();
 `);
 fs.writeFileSync(
   path.join(fixture, "index.html"),
-  '<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="script-src file:">' +
+  '<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="script-src \'self\'">' +
     '<title>External Demo</title></head>' +
     '<body><script src="frontend.js"></script></body></html>'
 );

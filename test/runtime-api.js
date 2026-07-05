@@ -15,6 +15,7 @@ const {
   PERMISSION_GROUPS
 } = require("../runtime/app");
 const {
+  resolveAppUserModelId,
   resolveLogPath,
   resolveUpdateDirectory,
   resolveWebViewDataDirectory
@@ -91,6 +92,9 @@ assert.ok(COMMAND_PERMISSIONS.has("clipboard:write"));
 assert.ok(PERMISSION_GROUPS.has("fs:*"));
 assert.ok(PERMISSION_GROUPS.has("dialog:*"));
 assert.ok(PERMISSION_GROUPS.has("clipboard:*"));
+assert.match(resolveAppUserModelId("My App"), /^NodeViewJS\.My\.App\.[0-9a-f]{16}$/);
+assert.equal(resolveAppUserModelId("My App"), resolveAppUserModelId("My App"));
+assert.notEqual(resolveAppUserModelId("My App"), resolveAppUserModelId("My-App"));
 assert.equal(typeof clipboard.readText, "function");
 assert.equal(typeof clipboard.writeText, "function");
 assert.equal(typeof dialog.message, "function");

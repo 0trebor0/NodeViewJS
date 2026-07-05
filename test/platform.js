@@ -216,6 +216,9 @@ assert.match(windowsWebView, /state\.devtools_enabled && !state\.bridge_embedded
 assert.match(windowsWebView, /add_NewWindowRequested/);
 assert.match(windowsWebView, /add_PermissionRequested/);
 assert.match(windowsWebView, /add_WebResourceRequested/);
+assert.match(windowsWebView, /SetVirtualHostNameToFolderMapping/);
+assert.match(windowsWebView, /COREWEBVIEW2_HOST_RESOURCE_ACCESS_KIND_DENY_CORS/);
+assert.match(windowsWebView, /ClearVirtualHostNameToFolderMapping/);
 assert.match(windowsWebView, /add_DownloadStarting/);
 assert.match(windowsWebView, /add_LaunchingExternalUriScheme/);
 assert.match(windowsShell, /ShellExecuteW/);
@@ -260,6 +263,7 @@ assert.match(windowsHost, /ITaskbarList3/);
 assert.match(windowsHost, /SetProgressState/);
 assert.match(windowsHost, /SetOverlayIcon/);
 assert.match(windowsHost, /FlashWindowEx/);
+assert.match(windowsHost, /SetCurrentProcessExplicitAppUserModelID/);
 assert.match(nativeApi, /SetNativeTaskbarProgress/);
 assert.match(nativeApi, /SetNativeTaskbarOverlay/);
 assert.match(nativeApi, /RequestNativeWindowAttention/);

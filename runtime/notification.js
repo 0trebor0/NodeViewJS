@@ -7,18 +7,25 @@ function native() {
   return nativeAddon;
 }
 
-function show(options = {}) {
+function normalizeNotificationOptions(options = {}) {
   if (!options || typeof options !== "object" || Array.isArray(options)) {
     throw new TypeError("Notification options must be an object.");
   }
   if (typeof options.message !== "string") {
     throw new TypeError("Notification message must be a string.");
   }
-
-  native().showNotification({
-    title: options.title ?? "NodeViewJS",
-    message: options.message
-  });
+  const title = options.title ?? "NodeViewJS";
+  if (typeof title !== "string" || title.trim().length === 0 || title.length > 63) {
+    throw new TypeError("Notification title must be a non-empty string of at most 63 characters.");
+  }
+  if (options.message.trim().length === 0 || options.message.length > 255) {
+    throw new TypeError("Notification message must be a non-empty string of at most 255 characters.");
+  }
+  return Object.freeze({ title, message: options.message });
 }
 
-module.exports = { show };
+function show(options = {}) {
+  native().showNotification(normalizeNotificationOptions(options));
+}
+
+module.exports = { normalizeNotificationOptions, show };

@@ -29,6 +29,7 @@ struct WindowState {
   HWND window = nullptr;
   std::wstring entry_file;
   std::wstring webview_data_directory;
+  std::wstring app_user_model_id;
   bool webview_started = false;
   int min_width = 0;
   int min_height = 0;
@@ -46,6 +47,7 @@ struct WindowState {
   bool transparent = false;
   bool bridge_embedded = false;
   bool notification_icon_added = false;
+  std::uint32_t notification_count = 0;
   bool tray_icon_added = false;
   HICON window_icon = nullptr;
   HICON tray_icon = nullptr;
@@ -353,6 +355,11 @@ LRESULT CALLBACK WindowProcedure(HWND window, UINT message, WPARAM w_param, LPAR
         return 0;
       }
       return 0;
+    case kNotificationCallbackMessage:
+      if (LOWORD(l_param) == NIN_BALLOONUSERCLICK || LOWORD(l_param) == WM_LBUTTONUP) {
+        ShowAppWindow(*native_window);
+      }
+      return 0;
     default:
       return DefWindowProc(window, message, w_param, l_param);
   }
@@ -572,6 +579,14 @@ void NativeWindow::Create(const Napi::Object& options) {
   auto& g_state = *state_;
   const Napi::Env env = options.Env();
   const std::wstring title = GetRequiredString(options, "title");
+  g_state.app_user_model_id = GetOptionalString(options, "appUserModelId");
+  if (!g_state.app_user_model_id.empty()) {
+    const HRESULT identity_result =
+        SetCurrentProcessExplicitAppUserModelID(g_state.app_user_model_id.c_str());
+    if (FAILED(identity_result)) {
+      throw Napi::Error::New(env, "Could not assign the Windows application identity.");
+    }
+  }
   const std::wstring icon_path = GetOptionalString(options, "icon");
   g_state.webview_data_directory = GetOptionalString(options, "dataDirectory");
   const int width = GetDimension(options, "width", 800);
@@ -834,6 +849,10 @@ Napi::Object NativeWindow::GetState(Napi::Env env) {
 
   Napi::Object result = Napi::Object::New(env);
   result.Set("title", Napi::String::New(env, utf16_title));
+  const std::u16string utf16_app_user_model_id(
+      reinterpret_cast<const char16_t*>(state.app_user_model_id.data()),
+      state.app_user_model_id.size());
+  result.Set("appUserModelId", Napi::String::New(env, utf16_app_user_model_id));
   result.Set("x", Napi::Number::New(env, window_rectangle.left));
   result.Set("y", Napi::Number::New(env, window_rectangle.top));
   result.Set("width", Napi::Number::New(env, client_rectangle.right - client_rectangle.left));
@@ -852,6 +871,7 @@ Napi::Object NativeWindow::GetState(Napi::Env env) {
   result.Set("taskbarProgressState", Napi::String::New(env, state.taskbar_progress_state));
   result.Set("taskbarProgressValue", Napi::Number::New(env, state.taskbar_progress_value));
   result.Set("hasTaskbarOverlay", Napi::Boolean::New(env, state.taskbar_overlay));
+  result.Set("notificationCount", Napi::Number::New(env, state.notification_count));
   return result;
 }
 
@@ -1135,28 +1155,50 @@ void NativeWindow::ShowNotification(const Napi::Object& options) {
   const std::wstring title = GetRequiredString(options, "title");
   const std::wstring message = GetRequiredString(options, "message");
 
+  const HICON icon = g_state.window_icon != nullptr
+      ? g_state.window_icon
+      : LoadIcon(nullptr, IDI_APPLICATION);
+  auto add_icon = [&]() {
+    NOTIFYICONDATA registration{};
+    registration.cbSize = sizeof(registration);
+    registration.hWnd = g_state.window;
+    registration.uID = kNotificationIconId;
+    registration.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
+    registration.uCallbackMessage = kNotificationCallbackMessage;
+    registration.hIcon = icon;
+    wcsncpy_s(registration.szTip, title.c_str(), _TRUNCATE);
+    if (!Shell_NotifyIcon(NIM_ADD, &registration)) return false;
+
+    registration.uVersion = NOTIFYICON_VERSION_4;
+    Shell_NotifyIcon(NIM_SETVERSION, &registration);
+    g_state.notification_icon_added = true;
+    return true;
+  };
+
+  if (!g_state.notification_icon_added && !add_icon()) {
+    throw Napi::Error::New(env, "Could not register the notification icon.");
+  }
+
   NOTIFYICONDATA notification{};
   notification.cbSize = sizeof(notification);
   notification.hWnd = g_state.window;
   notification.uID = kNotificationIconId;
   notification.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP | NIF_INFO;
   notification.uCallbackMessage = kNotificationCallbackMessage;
-  notification.hIcon = LoadIcon(nullptr, IDI_APPLICATION);
+  notification.hIcon = icon;
+  notification.hBalloonIcon = icon;
   wcsncpy_s(notification.szTip, title.c_str(), _TRUNCATE);
   wcsncpy_s(notification.szInfoTitle, title.c_str(), _TRUNCATE);
   wcsncpy_s(notification.szInfo, message.c_str(), _TRUNCATE);
-  notification.dwInfoFlags = NIIF_INFO;
-
-  if (!g_state.notification_icon_added) {
-    if (!Shell_NotifyIcon(NIM_ADD, &notification)) {
-      throw Napi::Error::New(env, "Could not register the notification icon.");
-    }
-    g_state.notification_icon_added = true;
-  }
+  notification.dwInfoFlags = NIIF_USER | NIIF_LARGE_ICON;
 
   if (!Shell_NotifyIcon(NIM_MODIFY, &notification)) {
-    throw Napi::Error::New(env, "Could not show the notification.");
+    g_state.notification_icon_added = false;
+    if (!add_icon() || !Shell_NotifyIcon(NIM_MODIFY, &notification)) {
+      throw Napi::Error::New(env, "Could not show the notification.");
+    }
   }
+  ++g_state.notification_count;
 }
 
 Napi::Value ShowFileDialog(NativeWindow& native_window, Napi::Env env, bool save) {

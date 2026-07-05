@@ -628,7 +628,7 @@ The frontend does not need to include a bridge script. NodeViewJS provides `wind
 
 ## How the bridge is loaded
 
-During portable packaging, NodeViewJS writes the bridge to `resources/app/__nodeview/bridge.js` and adds a relative external script reference to every copied `.html` file. Your source HTML is never changed. This avoids requiring `unsafe-inline`; WebView2 file pages can use a policy such as `script-src file:` while the native host limits resources to the app root. Packaged apps set an internal marker so the native host skips document-start script injection and navigates directly to the prepared HTML.
+During portable packaging, NodeViewJS writes the bridge to `resources/app/__nodeview/bridge.js` and adds a relative external script reference to every copied `.html` file. Your source HTML is never changed. This avoids requiring `unsafe-inline`; Windows pages can use a policy such as `script-src 'self'` while the native host limits resources to the app root. Packaged apps set an internal marker so the native host skips document-start script injection and navigates directly to the prepared HTML.
 
 The bridge starts as normal editable JavaScript in:
 
@@ -653,7 +653,7 @@ This is fast because:
 - there is no local HTTP server;
 - packaging performs the HTML rewrite once instead of at app startup;
 - packaged native startup skips bridge registration;
-- app pages load directly from local files.
+- app pages load directly from local files through a private per-WebView mapping.
 
 Only files copied into the package are prepared. HTML generated dynamically after packaging must provide its own frontend bridge if it is used as a top-level app page.
 
@@ -1169,7 +1169,7 @@ Use `app.command()`, `app.on()`, and `app.emit()` for application IPC. Direct us
 
 ### Notification helper
 
-`notification.show()` displays a basic native Windows notification:
+Use `notification.show()` after `app.run()` to display a native Windows notification:
 
 ```js
 const { notification } = require("nodeviewjs");
@@ -1179,6 +1179,17 @@ notification.show({
   message: "Finished loading."
 });
 ```
+
+You can target an application window explicitly. Clicking its Windows notification restores and focuses that window:
+
+```js
+app.showNotification({ title: "My App", message: "Finished loading." });
+app.mainWindow.showNotification({ title: "Download", message: "Complete." });
+```
+
+Titles are limited to 63 characters and messages to 255 characters. Windows notification settings, Do Not Disturb, and Focus Assist can still suppress presentation. NodeViewJS uses the app icon when available and retries registration if Windows Explorer has restarted.
+
+NodeViewJS assigns Windows an explicit identity derived from `appId`, so notifications and taskbar grouping use your application identity instead of displaying `Node.js JavaScript Runtime`. Keep `appId` stable between releases.
 
 Dialog and notification helpers are trusted backend APIs and are not exposed directly to the WebView. Frontend-triggered use should go through registered commands requiring the relevant `dialog:open`, `dialog:save`, or `notification:show` permission.
 
@@ -1322,6 +1333,8 @@ app.command("loadData", async payload => {
 The frontend can only call commands that the backend registers.
 
 Top-level WebView navigation is restricted to local files inside the configured `entry` file's directory. Remote URLs and local files outside that directory are blocked and logged to stderr.
+
+On Windows, the entry directory is mapped in memory to `https://app.nodeview.local/` inside that WebView instance. It does not register DNS, edit the hosts file, open a port, contact a server, or persist after the WebView closes. The mapping avoids Chromium's unique `file:` origin warnings while retaining canonical app-root checks and deny-CORS resource access.
 
 On Windows, `window.NodeViewJS` is created only in the top-level document. Native IPC also verifies that each message came from the current canonical local document under the configured app root; child frames, outside-root files, unexpected origins, and stale pages cannot invoke backend commands or emit backend events. macOS and Linux parity for this boundary is deferred.
 

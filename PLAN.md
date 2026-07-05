@@ -111,6 +111,7 @@ macOS and Linux security-parity work is deferred for now, and each cross-platfor
 - Windows portable builds expose one root executable plus one `resources/` folder containing `app/`, `runtime/`, and the launcher-bound `integrity.manifest`; the runtime log is the only permitted unlisted resource file. Editable runtime modules are bundled into `runtime/nodeview.js`, and the native addon is staged beside it.
 - Project commands are wrapped by small scripts so setup, build, dev, clean, and packaging stay easy to run.
 - Portable packaging copies the bridge as a local external script, references it from copied HTML, and makes packaged native hosts skip document-start injection; development keeps the in-memory fallback without modifying source HTML.
+- Windows maps each app root to a private in-memory `https://app.nodeview.local/` WebView origin, avoiding `file:` unique-origin warnings without DNS, a server, persistence, or access outside the canonical app root.
 - The `nodeviewjs` CLI can create starter apps and run setup/build/start/dev/package commands, including packaging external projects from their current working directory.
 - Portable packaging reads app name and entry from the target project's `nodeviewjs` block in `package.json`.
 - Portable packaging supports `include` and `exclude` config for app assets.
@@ -118,7 +119,7 @@ macOS and Linux security-parity work is deferred for now, and each cross-platfor
 - Launcher exe metadata is generated from `package.json` and compiled into the Windows version resource.
 - `app.show()` and `app.hide()` support restoring windows hidden by `closeToHide`.
 - Optional startup timing logs help measure launch overhead during development.
-- `notification.show()` displays a basic native Windows notification.
+- `notification.show()`, `app.showNotification()`, and `window.showNotification()` display validated native Windows notifications using an app-specific Windows identity, the app icon, current notification-icon protocol, Explorer-restart recovery, and click-to-restore behavior.
 - `tray` app options and `app.setTray()` add a basic system tray icon with Show and Quit actions.
 - `dialog.openFile()` and `dialog.saveFile()` provide native open/save file pickers.
 - Top-level WebView navigation is restricted to the local app directory; remote and outside-file navigations are blocked.

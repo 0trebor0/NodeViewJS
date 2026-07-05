@@ -27,6 +27,14 @@ function resolveAppDataLabel(appId) {
     .slice(0, 48) || "app";
 }
 
+function resolveAppUserModelId(appId) {
+  const resolvedAppId = resolveAppId(appId);
+  const label = resolveAppDataLabel(resolvedAppId)
+    .replace(/[-_]+/g, ".")
+    .replace(/^\.+|\.+$/g, "") || "App";
+  return `NodeViewJS.${label}.${hashAppId(resolvedAppId)}`.slice(0, 128);
+}
+
 function resolveLocalAppData(environment) {
   const platform = environment.NODEVIEW_PLATFORM || process.platform;
   if (platform === "darwin") {
@@ -95,6 +103,7 @@ function resolveLogPath(appId, environment = process.env) {
 
 module.exports = {
   resolveAppId,
+  resolveAppUserModelId,
   resolveLogDirectory,
   resolveLogPath,
   resolveUpdateDirectory,

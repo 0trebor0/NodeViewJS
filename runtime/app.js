@@ -4,12 +4,17 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { performance } = require("node:perf_hooks");
 
-const { resolveAppId, resolveWebViewDataDirectory } = require("./data-directory");
+const {
+  resolveAppId,
+  resolveAppUserModelId,
+  resolveWebViewDataDirectory
+} = require("./data-directory");
 const { startDevWatcher } = require("./dev-watcher");
 const { createErrorLogger } = require("./error-logger");
 const ipc = require("./ipc");
 const { findLaunchTargets, resolveLaunchConfiguration } = require("./launch-routing");
 const { normalizeContextPosition, normalizeMenuTemplate } = require("./menu");
+const { normalizeNotificationOptions } = require("./notification");
 const { SingleInstanceCoordinator } = require("./single-instance");
 const { normalizeAttentionType, normalizeOverlay, normalizeProgress } = require("./taskbar");
 
@@ -480,6 +485,13 @@ class AppWindow {
     return this;
   }
 
+  showNotification(options) {
+    const notification = normalizeNotificationOptions(options);
+    if (this.#id === undefined) throw new Error("Window has not been opened.");
+    native().showNotification(this.#id, notification);
+    return this;
+  }
+
   setTray(options = {}) {
     const tray = resolveTrayOptions(options, this.options.title, this.options.icon);
     if (!tray) throw new TypeError("Tray options must be an object or true.");
@@ -496,6 +508,7 @@ class AppWindow {
 
     const id = native().createWindow({
       title: this.options.title,
+      appUserModelId: resolveAppUserModelId(this.options.appId),
       width: this.options.width,
       height: this.options.height,
       resizable: this.options.resizable,
@@ -946,6 +959,11 @@ class App {
 
   requestAttention(type = "informational") {
     this.#mainWindow.requestAttention(type);
+    return this;
+  }
+
+  showNotification(options) {
+    this.#mainWindow.showNotification(options);
     return this;
   }
 

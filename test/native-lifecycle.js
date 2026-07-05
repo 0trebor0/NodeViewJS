@@ -38,6 +38,7 @@ if (process.platform === "win32") {
 
   const controlsWindow = native.createWindow({
     title: "NodeViewJS Window Controls Test",
+    appUserModelId: "NodeViewJS.NativeLifecycle.Test",
     width: 500,
     height: 300,
     frame: true,
@@ -64,6 +65,7 @@ if (process.platform === "win32") {
     }
   );
   assert.equal(initialControlsState.taskbarProgressState, "none");
+  assert.equal(initialControlsState.appUserModelId, "NodeViewJS.NativeLifecycle.Test");
   assert.equal(initialControlsState.taskbarProgressValue, 0);
   assert.equal(initialControlsState.hasTaskbarOverlay, false);
   native.setWindowTitle(controlsWindow, "Updated Controls Test");

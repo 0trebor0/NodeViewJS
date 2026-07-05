@@ -167,3 +167,7 @@ app.command("loadMedia", async ({ folder = "pictures" }) => {
 });
 
 app.run();
+app.showNotification({
+  title: "My App",
+  message: "The application is ready."
+});

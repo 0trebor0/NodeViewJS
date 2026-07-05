@@ -160,7 +160,10 @@ app.once("bridge-test-result", ({
     console.error("Frontend did not reject an invalid event name.");
     process.exit(1);
   }
-  if (!String(remoteNavigationUrl).endsWith("/fixtures/bridge.html")) {
+  const expectedEntrySuffix = process.platform === "win32"
+    ? "https://app.nodeview.local/bridge.html"
+    : "/fixtures/bridge.html";
+  if (!String(remoteNavigationUrl).endsWith(expectedEntrySuffix)) {
     console.error(`WebView accepted a remote top-level navigation: ${remoteNavigationUrl}`);
     process.exit(1);
   }

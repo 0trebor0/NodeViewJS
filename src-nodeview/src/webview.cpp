@@ -48,6 +48,7 @@ struct WebViewState {
   Microsoft::WRL::ComPtr<ICoreWebView2Environment> environment;
   Microsoft::WRL::ComPtr<ICoreWebView2Controller> controller;
   Microsoft::WRL::ComPtr<ICoreWebView2> webview;
+  Microsoft::WRL::ComPtr<ICoreWebView2_3> webview3;
   Microsoft::WRL::ComPtr<ICoreWebView2_4> webview4;
   Microsoft::WRL::ComPtr<ICoreWebView2_18> webview18;
   EventRegistrationToken web_message_token{};
@@ -85,6 +86,9 @@ namespace {
 
 using Microsoft::WRL::Callback;
 using nodeview::WebViewState;
+
+constexpr wchar_t kAppVirtualHost[] = L"app.nodeview.local";
+constexpr wchar_t kAppVirtualOrigin[] = L"https://app.nodeview.local/";
 
 void ReportWebViewError(const WebViewState& state, const wchar_t* message) {
   fwprintf(stderr, L"[NodeViewJS native] %ls\n", message);
@@ -187,14 +191,27 @@ bool TryGetAllowedDocumentPath(
     return false;
   }
 
-  std::vector<wchar_t> file_path(32768);
-  DWORD file_path_length = static_cast<DWORD>(file_path.size());
-  if (FAILED(PathCreateFromUrlW(uri, file_path.data(), &file_path_length, 0))) {
-    return false;
-  }
-
   try {
-    const std::filesystem::path candidate = std::filesystem::weakly_canonical(file_path.data());
+    std::filesystem::path candidate;
+    const std::size_t virtual_origin_length = wcslen(kAppVirtualOrigin);
+    if (_wcsnicmp(uri, kAppVirtualOrigin, virtual_origin_length) == 0) {
+      std::wstring relative(uri + virtual_origin_length);
+      const std::size_t delimiter = relative.find_first_of(L"?#");
+      if (delimiter != std::wstring::npos) relative.resize(delimiter);
+      std::vector<wchar_t> decoded(relative.begin(), relative.end());
+      decoded.push_back(L'\0');
+      if (FAILED(UrlUnescapeW(decoded.data(), nullptr, nullptr, URL_UNESCAPE_INPLACE))) {
+        return false;
+      }
+      candidate = std::filesystem::weakly_canonical(state.content_root / decoded.data());
+    } else {
+      std::vector<wchar_t> file_path(32768);
+      DWORD file_path_length = static_cast<DWORD>(file_path.size());
+      if (FAILED(PathCreateFromUrlW(uri, file_path.data(), &file_path_length, 0))) {
+        return false;
+      }
+      candidate = std::filesystem::weakly_canonical(file_path.data());
+    }
     if (!IsPathWithin(state.content_root, candidate)) {
       return false;
     }
@@ -475,16 +492,19 @@ void WebViewHost::Initialize(
   state.window = window;
   state.bridge_embedded = bridge_embedded;
   const std::uint64_t initialization_id = ++state.initialization_id;
-  const std::wstring entry_url = MakeFileUrl(entry_file);
-  if (entry_url.empty()) {
-    ReportWebViewError(state, L"Could not create a file URL for the app entry file.");
-    return;
-  }
+  std::wstring entry_url;
 
   std::wstring user_data_folder;
   try {
     const std::filesystem::path entry_path = std::filesystem::weakly_canonical(entry_file);
     state.content_root = entry_path.parent_path();
+    const std::wstring entry_file_url = MakeFileUrl(entry_path.wstring());
+    const std::size_t filename_offset = entry_file_url.find_last_of(L'/');
+    if (entry_file_url.empty() || filename_offset == std::wstring::npos) {
+      ReportWebViewError(state, L"Could not create an app URL for the entry file.");
+      return;
+    }
+    entry_url = std::wstring(kAppVirtualOrigin) + entry_file_url.substr(filename_offset + 1);
     const std::filesystem::path data_path = data_directory.empty()
         ? GetDefaultWebViewDataDirectory(entry_path)
         : std::filesystem::absolute(data_directory);
@@ -561,6 +581,25 @@ void WebViewHost::Initialize(
                       if (FAILED(webview_result)) {
                         ReportWebViewError(state, L"Could not access the WebView2 instance", webview_result);
                         return webview_result;
+                      }
+                      const HRESULT webview3_result = state.webview.As(&state.webview3);
+                      if (FAILED(webview3_result)) {
+                        ReportWebViewError(
+                            state,
+                            L"This WebView2 Runtime does not support local app host mapping",
+                            webview3_result);
+                        return webview3_result;
+                      }
+                      const HRESULT mapping_result = state.webview3->SetVirtualHostNameToFolderMapping(
+                          kAppVirtualHost,
+                          state.content_root.c_str(),
+                          COREWEBVIEW2_HOST_RESOURCE_ACCESS_KIND_DENY_CORS);
+                      if (FAILED(mapping_result)) {
+                        ReportWebViewError(
+                            state,
+                            L"Could not create the private local app mapping",
+                            mapping_result);
+                        return mapping_result;
                       }
                       const HRESULT security_policy_result = ConfigureSecurityPolicy(state);
                       if (FAILED(security_policy_result)) {
@@ -756,6 +795,9 @@ void WebViewHost::Close() {
   ++state.initialization_id;
   if (state.controller) {
     if (state.webview) {
+      if (state.webview3) {
+        state.webview3->ClearVirtualHostNameToFolderMapping(kAppVirtualHost);
+      }
       if (state.external_uri_handler_registered && state.webview18) {
         state.webview18->remove_LaunchingExternalUriScheme(state.external_uri_token);
       }
@@ -797,6 +839,7 @@ void WebViewHost::Close() {
   state.webview18.Reset();
   state.webview4.Reset();
   state.webview.Reset();
+  state.webview3.Reset();
   state.controller.Reset();
   state.environment.Reset();
   state.download_handler_registered = false;
