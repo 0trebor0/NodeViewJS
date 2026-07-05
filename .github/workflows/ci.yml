@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-14, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev xvfb
+      - run: npm ci
+      - run: npm test
+      - if: runner.os == 'Windows'
+        run: npm run security:gate
+      - if: runner.os == 'macOS'
+        run: npm run test:bridge
+      - if: runner.os == 'macOS'
+        run: npm run test:multi-window
+      - if: runner.os == 'Linux'
+        run: xvfb-run -a npm run test:bridge
+      - if: runner.os == 'Linux'
+        run: xvfb-run -a npm run test:multi-window

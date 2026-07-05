@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Outside-root hostile frame</title>
+  </head>
+  <body>
+    <script>
+      const raw = window.chrome?.webview || window.webkit?.messageHandlers?.nodeview;
+      raw?.postMessage({
+        version: 1,
+        type: "invoke",
+        id: 9401,
+        command: "hostileFrameCommand",
+        payload: { frame: "outside" }
+      });
+      raw?.postMessage({
+        version: 1,
+        type: "event",
+        event: "hostile-frame-event",
+        payload: { frame: "outside" }
+      });
+      parent.postMessage({
+        type: "nodeview-frame-report",
+        frame: "outside",
+        bridgeExposed: typeof window.NodeViewJS !== "undefined",
+        rawAvailable: Boolean(raw)
+      }, "*");
+    </script>
+  </body>
+</html>

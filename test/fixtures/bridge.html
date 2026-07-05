@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>NodeViewJS Bridge Test</title>
+  </head>
+  <body>
+    <script>
+      let eventCount = 0;
+      let offCount = 0;
+      let serverVersion;
+      let invalidEventError;
+      const rawWebView2 = window.chrome?.webview;
+      const rawWebKit = window.webkit?.messageHandlers?.nodeview;
+
+      try {
+        NodeViewJS.on("", () => {});
+      } catch (error) {
+        invalidEventError = error.message;
+      }
+
+      if (rawWebView2) {
+        rawWebView2.addEventListener("message", ({ data }) => {
+          if (data.type === "event" && data.event === "server-event" && serverVersion === undefined) {
+            serverVersion = data.version;
+          }
+        });
+      } else {
+        serverVersion = 1;
+      }
+
+      NodeViewJS.once("server-event", ({ value }) => {
+        if (value !== 1) {
+          NodeViewJS.emit("bridge-test-result", { error: "Unexpected server event payload." });
+          return;
+        }
+        eventCount++;
+      });
+
+      function removedFrontendHandler() {
+        offCount++;
+      }
+      NodeViewJS.on("server-event", removedFrontendHandler);
+      NodeViewJS.off("server-event", removedFrontendHandler);
+
+      NodeViewJS.emit("removed-backend-event");
+      (rawWebView2 || rawWebKit).postMessage({
+        version: 999,
+        type: "event",
+        event: "unsupported-version-event"
+      });
+      NodeViewJS.emit("frontend-ready");
+
+      setTimeout(() => {
+        Promise.all([
+          NodeViewJS.invoke("greet", { name: "integration" }),
+          NodeViewJS.invoke("readConfig"),
+          NodeViewJS.invoke("writeConfig").then(
+            () => undefined,
+            (error) => error.message
+          ),
+          NodeViewJS.invoke("openSettings"),
+          NodeViewJS.invoke("openAdmin").then(
+            () => undefined,
+            (error) => error.message
+          ),
+          NodeViewJS.invoke("readSettings"),
+          NodeViewJS.invoke("getOutsideNavigationUrl"),
+          NodeViewJS.invoke("missingCommand").then(
+            () => undefined,
+            (error) => error.message
+          ),
+          NodeViewJS.invoke("").then(
+            () => undefined,
+            (error) => error.message
+          )
+        ])
+          .then(([
+            result,
+            allowedPermissionResult,
+            deniedPermissionError,
+            allowedScopeResult,
+            deniedScopeError,
+            multiplePermissionResult,
+            outsideUrl,
+            unknownCommandError,
+            invalidCommandError
+          ]) => {
+            window.location.href = "https://example.com/nodeviewjs-blocked-navigation";
+            setTimeout(() => {
+              const remoteNavigationUrl = window.location.href;
+              window.location.href = outsideUrl;
+              setTimeout(() => {
+                NodeViewJS.emit("bridge-test-result", {
+                  result,
+                  allowedPermissionResult,
+                  deniedPermissionError,
+                  allowedScopeResult,
+                  deniedScopeError,
+                  multiplePermissionResult,
+                  eventCount,
+                  offCount,
+                  serverVersion,
+                  unknownCommandError,
+                  invalidCommandError,
+                  invalidEventError,
+                  remoteNavigationUrl,
+                  outsideNavigationUrl: window.location.href
+                });
+              }, 100);
+            }, 100);
+          })
+          .catch((error) => NodeViewJS.emit("bridge-test-result", {
+            error: error.message,
+            eventCount,
+            offCount,
+            serverVersion
+          }));
+      }, 100);
+    </script>
+  </body>
+</html>

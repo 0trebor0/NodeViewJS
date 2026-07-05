@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>IPC security test</title>
+  </head>
+  <body>
+    <script>
+      const raw = window.chrome?.webview || window.webkit?.messageHandlers?.nodeview;
+      const post = (message) => raw.postMessage(message);
+      const wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
+
+      async function run() {
+        post({ type: "invoke", id: 100, command: "sensitiveCommand" });
+        post({ version: 1, type: "invoke", id: 101, command: "sensitiveCommand", extra: true });
+        post(JSON.parse(
+          '{"version":1,"type":"invoke","id":102,"command":"sensitiveCommand",'
+          + '"payload":{"__proto__":{"polluted":true}}}'
+        ));
+
+        let deepPayload = "leaf";
+        for (let index = 0; index < 40; index++) deepPayload = [deepPayload];
+        post({ version: 1, type: "invoke", id: 103, command: "sensitiveCommand", payload: deepPayload });
+        post({
+          version: 1,
+          type: "invoke",
+          id: 104,
+          command: "sensitiveCommand",
+          payload: "x".repeat(300000)
+        });
+        post({ type: "event", event: "malformed-security-event" });
+        post({
+          version: 1,
+          type: "event",
+          event: "malformed-security-event",
+          extra: true
+        });
+
+        const duplicate = { version: 1, type: "invoke", id: 200, command: "duplicateProbe" };
+        post(duplicate);
+        post(duplicate);
+        await wait(300);
+        post(duplicate);
+        await wait(100);
+
+        for (let index = 0; index < 65; index++) {
+          post({
+            version: 1,
+            type: "invoke",
+            id: 300 + index,
+            command: "concurrencyProbe"
+          });
+        }
+        await wait(700);
+
+        const status = await NodeViewJS.invoke("getIpcSecurityStatus");
+        NodeViewJS.emit("ipc-security-result", status);
+      }
+
+      run().catch((error) => {
+        NodeViewJS.emit("ipc-security-result", { error: error.message });
+      });
+    </script>
+  </body>
+</html>

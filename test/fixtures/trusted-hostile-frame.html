@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Hostile local frame</title>
+  </head>
+  <body>
+    <script>
+      const raw = window.chrome?.webview || window.webkit?.messageHandlers?.nodeview;
+      raw?.postMessage({
+        version: 1,
+        type: "invoke",
+        id: 9101,
+        command: "hostileFrameCommand",
+        payload: { frame: "local" }
+      });
+      raw?.postMessage({
+        version: 1,
+        type: "event",
+        event: "hostile-frame-event",
+        payload: { frame: "local" }
+      });
+      parent.postMessage({
+        type: "nodeview-frame-report",
+        frame: "local",
+        bridgeExposed: typeof window.NodeViewJS !== "undefined",
+        rawAvailable: Boolean(raw)
+      }, "*");
+    </script>
+  </body>
+</html>

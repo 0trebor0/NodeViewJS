@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Multi-window main</title>
+  </head>
+  <body data-window="main">
+    <script>
+      const label = document.body.dataset.window;
+
+      NodeViewJS.on("broadcast-check", () => {
+        NodeViewJS.emit("broadcast-received", { label });
+      });
+
+      NodeViewJS.invoke("identifyWindow", { label }).then((result) => {
+        NodeViewJS.emit("window-ready", { label, result });
+      });
+    </script>
+  </body>
+</html>

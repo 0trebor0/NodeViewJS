@@ -1,0 +1,82 @@
+{
+  "name": "nodeviewjs",
+  "version": "0.1.0",
+  "description": "A lightweight Node.js desktop runtime using the system WebView.",
+  "main": "runtime/index.js",
+  "bin": {
+    "nodeviewjs": "bin/nodeviewjs.js"
+  },
+  "files": [
+    "bin",
+    "runtime",
+    "scripts",
+    "src-nodeview"
+  ],
+  "scripts": {
+    "install": "npm run build",
+    "setup": "node scripts/setup.js",
+    "build": "node scripts/build.js",
+    "build:security-analysis": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build.ps1 -SecurityAnalysis",
+    "clean": "node scripts/clean.js",
+    "start": "node examples/basic/app.js",
+    "dev": "node bin/nodeviewjs.js dev",
+    "package:portable": "powershell -ExecutionPolicy Bypass -File scripts/package-portable.ps1",
+    "package": "node bin/nodeviewjs.js package",
+    "package:installer": "powershell -ExecutionPolicy Bypass -File scripts/package-installer.ps1",
+    "package:macos": "node scripts/package-macos.js",
+    "package:linux": "node scripts/package-linux.js",
+    "update:manifest": "node scripts/generate-update-manifest.js",
+    "test:runtime": "node test/runtime-api.js",
+    "test:native-lifecycle": "node test/native-lifecycle.js",
+    "test:bridge": "npm run test:native-lifecycle && node test/bridge-integration.js",
+    "test:ipc-security": "node test/ipc-security.js",
+    "test:ipc-security-integration": "node test/ipc-security-integration.js",
+    "test:trusted-document": "node test/trusted-document-integration.js",
+    "test:webview-capabilities": "node test/webview-capabilities-integration.js",
+    "test:package-inputs": "node test/package-input-security.js",
+    "test:integrity": "node test/package-integrity.js",
+    "test:pe-hardening": "powershell -NoProfile -ExecutionPolicy Bypass -File test/pe-hardening.ps1",
+    "test:security-corpus": "node test/security-corpus.js",
+    "test:multi-window": "node test/multi-window-integration.js",
+    "test:cli": "node test/cli.js",
+    "test:installer": "powershell -ExecutionPolicy Bypass -File test/installer-smoke.ps1",
+    "test:updater": "node test/updater.js",
+    "test:plugins": "node test/plugins.js",
+    "test:platform": "node test/platform.js",
+    "test:single-instance": "node test/app-single-instance.js && node test/single-instance.js",
+    "test:associations": "node test/windows-associations.js",
+    "test:bundle": "node test/runtime-bundle.js",
+    "test:menu": "node test/menu.js",
+    "test:menu-native": "powershell -NoProfile -ExecutionPolicy Bypass -File test/menu-native.ps1",
+    "test:taskbar": "node test/taskbar.js",
+    "test:taskbar-native": "powershell -NoProfile -ExecutionPolicy Bypass -File test/taskbar-native.ps1",
+    "test:bridge-embed": "node test/embed-bridge.js",
+    "test": "npm run test:runtime && npm run test:ipc-security && npm run test:updater && npm run test:plugins && npm run test:platform && npm run test:single-instance && npm run test:associations && npm run test:bundle && npm run test:menu && npm run test:taskbar && npm run test:bridge-embed && npm run test:package-inputs && npm run test:integrity && npm run test:cli",
+    "security:audit": "npm audit --omit=dev --audit-level=high",
+    "security:gate": "npm run security:audit && npm run build:security-analysis && npm run test:pe-hardening && npm run test:security-corpus && npm run test:runtime && npm run test:ipc-security && npm run test:updater && npm run test:package-inputs && npm run test:integrity && npm run test:installer",
+    "generate:bridge": "node scripts/generate-bridge-header.js",
+    "setup:webview2": "powershell -ExecutionPolicy Bypass -File scripts/setup-webview2.ps1",
+    "debug": "npm run dev",
+    "example:basic": "node examples/basic/app.js"
+  },
+  "gypfile": true,
+  "dependencies": {
+    "node-addon-api": "^8.6.0",
+    "node-gyp": "^12.1.0"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "nodeviewjs": {
+    "name": "NodeViewDemo",
+    "appId": "nodeviewjs-demo",
+    "entry": "examples/basic/app.js",
+    "metadata": {
+      "companyName": "NodeViewJS",
+      "fileDescription": "NodeViewJS Demo",
+      "productName": "NodeViewJS Demo",
+      "copyright": "Copyright (C) 2026 NodeViewJS contributors"
+    }
+  },
+  "license": "MIT"
+}

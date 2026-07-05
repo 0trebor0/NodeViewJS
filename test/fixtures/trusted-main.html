@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Trusted document isolation</title>
+  </head>
+  <body>
+    <script>
+      const reports = new Map();
+
+      function hostileDocument(frame) {
+        return `<!doctype html><script>
+          const raw = window.chrome?.webview || window.webkit?.messageHandlers?.nodeview;
+          raw?.postMessage({
+            version: 1,
+            type: "invoke",
+            id: 9200 + ${JSON.stringify(frame)}.length,
+            command: "hostileFrameCommand",
+            payload: { frame: ${JSON.stringify(frame)} }
+          });
+          raw?.postMessage({
+            version: 1,
+            type: "event",
+            event: "hostile-frame-event",
+            payload: { frame: ${JSON.stringify(frame)} }
+          });
+          parent.postMessage({
+            type: "nodeview-frame-report",
+            frame: ${JSON.stringify(frame)},
+            bridgeExposed: typeof window.NodeViewJS !== "undefined",
+            rawAvailable: Boolean(raw)
+          }, "*");
+        <\/script>`;
+      }
+
+      window.addEventListener("message", ({ data }) => {
+        if (data?.type === "nodeview-frame-report") reports.set(data.frame, data);
+      });
+
+      const localFrame = document.createElement("iframe");
+      localFrame.src = "trusted-hostile-frame.html";
+      document.body.appendChild(localFrame);
+
+      const outsideFrame = document.createElement("iframe");
+      outsideFrame.src = "../trusted-outside-frame.html";
+      document.body.appendChild(outsideFrame);
+
+      const sourceDocumentFrame = document.createElement("iframe");
+      sourceDocumentFrame.srcdoc = hostileDocument("srcdoc");
+      document.body.appendChild(sourceDocumentFrame);
+
+      const dataFrame = document.createElement("iframe");
+      dataFrame.src = `data:text/html;charset=utf-8,${encodeURIComponent(hostileDocument("data"))}`;
+      document.body.appendChild(dataFrame);
+
+      async function continueTest() {
+        const deadline = Date.now() + 3000;
+        while (reports.size < 4 && Date.now() < deadline) {
+          await new Promise((resolve) => setTimeout(resolve, 25));
+        }
+
+        const mainResult = await NodeViewJS.invoke("trustedCaller", { page: "main" });
+        sessionStorage.setItem("nodeview-frame-reports", JSON.stringify([...reports.values()]));
+        sessionStorage.setItem("nodeview-main-result", mainResult);
+
+        window.addEventListener("pagehide", () => {
+          sessionStorage.setItem("nodeview-stale-attempted", "true");
+          const raw = window.chrome?.webview || window.webkit?.messageHandlers?.nodeview;
+          raw?.postMessage({
+            version: 1,
+            type: "invoke",
+            id: 9301,
+            command: "staleNavigationCommand"
+          });
+          raw?.postMessage({
+            version: 1,
+            type: "event",
+            event: "stale-navigation-event"
+          });
+        }, { once: true });
+
+        window.location.href = "trusted-destination.html";
+      }
+
+      continueTest().catch((error) => {
+        NodeViewJS.emit("trusted-document-result", { error: error.message });
+      });
+    </script>
+  </body>
+</html>

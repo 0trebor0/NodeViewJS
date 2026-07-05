@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>WebView capability policy test</title>
+    <script src="capability-local-script.js"></script>
+  </head>
+  <body>
+    <script>
+      const wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
+
+      async function run() {
+        const mark = (step) => NodeViewJS.emit("webview-capability-progress", { step });
+        let remoteFrameExecuted = false;
+        window.addEventListener("message", ({ data }) => {
+          if (data === "nodeviewjs-remote-frame-executed") remoteFrameExecuted = true;
+        });
+        const { remoteBaseUrl, downloadName } = await NodeViewJS.invoke("getCapabilityTestConfig");
+        mark("configured");
+
+        let remoteFetchBlocked = false;
+        try {
+          const response = await fetch(`${remoteBaseUrl}/fetch`);
+          remoteFetchBlocked = response.status === 403;
+        } catch {
+          remoteFetchBlocked = true;
+        }
+        mark("fetch");
+
+        const image = new Image();
+        const remoteImageBlocked = await new Promise((resolve) => {
+          image.onload = () => resolve(false);
+          image.onerror = () => resolve(true);
+          image.src = `${remoteBaseUrl}/image.png`;
+        });
+        mark("image");
+
+        const remoteScriptBlocked = await new Promise((resolve) => {
+          const script = document.createElement("script");
+          script.onload = () => resolve(false);
+          script.onerror = () => resolve(true);
+          script.src = `${remoteBaseUrl}/script.js`;
+          document.head.appendChild(script);
+        });
+
+        const frame = document.createElement("iframe");
+        frame.src = `${remoteBaseUrl}/frame`;
+        document.body.appendChild(frame);
+
+        window.open(`${remoteBaseUrl}/popup`, "_blank");
+        mark("resources");
+
+        let permissionDenied = false;
+        try {
+          permissionDenied = await Promise.race([
+            Notification.requestPermission().then((value) => value === "denied"),
+            wait(1000).then(() => false)
+          ]);
+        } catch {
+          permissionDenied = true;
+        }
+        mark("permission");
+
+        const download = document.createElement("a");
+        download.href = URL.createObjectURL(new Blob([
+          "NodeViewJS SEC-04 download cancellation fixture."
+        ], { type: "text/plain" }));
+        download.download = downloadName;
+        document.body.appendChild(download);
+        mark("download");
+        setTimeout(() => download.click(), 0);
+
+        await wait(300);
+        const startingUrl = window.location.href;
+        mark("external-attempt");
+        setTimeout(() => {
+          window.location.href = "mailto:nodeviewjs-sec04@example.invalid";
+        }, 0);
+        await wait(200);
+        mark("external");
+
+        NodeViewJS.emit("webview-capability-result", {
+          localScriptLoaded: window.localCapabilityScriptLoaded === true,
+          remoteScriptBlocked,
+          remoteFetchBlocked,
+          remoteImageBlocked,
+          remoteFrameBlocked: !remoteFrameExecuted,
+          permissionDenied,
+          downloadAttempted: true,
+          popupAttempted: true,
+          externalNavigationBlocked: window.location.href === startingUrl
+        });
+      }
+
+      run().catch((error) => {
+        NodeViewJS.emit("webview-capability-result", { error: error.message });
+      });
+    </script>
+  </body>
+</html>

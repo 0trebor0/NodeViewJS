@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Trusted destination</title>
+  </head>
+  <body>
+    <script>
+      (async () => {
+        const destinationResult = await NodeViewJS.invoke("trustedCaller", {
+          page: "destination"
+        });
+        const status = await NodeViewJS.invoke("getIsolationStatus");
+        NodeViewJS.emit("trusted-document-result", {
+          destinationResult,
+          frameReports: JSON.parse(sessionStorage.getItem("nodeview-frame-reports") || "[]"),
+          mainResult: sessionStorage.getItem("nodeview-main-result"),
+          staleAttempted: sessionStorage.getItem("nodeview-stale-attempted") === "true",
+          status
+        });
+      })().catch((error) => {
+        NodeViewJS.emit("trusted-document-result", { error: error.message });
+      });
+    </script>
+  </body>
+</html>
