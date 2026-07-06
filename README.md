@@ -79,7 +79,7 @@ The build script downloads/stages the WebView2 SDK package into `vendor/` when n
 If `node-gyp` cannot find Python, set `PYTHON` before building:
 
 ```powershell
-$env:PYTHON = "C:\Users\robert\AppData\Local\Programs\Python\Python312\python.exe"
+$env:PYTHON = "C:\Path\To\Python\python.exe"
 ```
 
 ## Install dependencies
@@ -1428,7 +1428,7 @@ Visual Studio 2017 is not enough for newer Node versions. For example, Node.js 2
 Set the `PYTHON` environment variable:
 
 ```powershell
-$env:PYTHON = "C:\Users\robert\AppData\Local\Programs\Python\Python312\python.exe"
+$env:PYTHON = "C:\Path\To\Python\python.exe"
 npm run build
 ```
 

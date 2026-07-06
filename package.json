@@ -2,6 +2,22 @@
   "name": "nodeviewjs",
   "version": "0.1.0",
   "description": "A lightweight Node.js desktop runtime using the system WebView.",
+  "keywords": [
+    "desktop",
+    "webview",
+    "webview2",
+    "nodejs",
+    "native"
+  ],
+  "homepage": "https://github.com/0trebor0/NodeViewJS#readme",
+  "bugs": {
+    "url": "https://github.com/0trebor0/NodeViewJS/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/0trebor0/NodeViewJS.git"
+  },
+  "author": "0trebor0",
   "main": "runtime/index.js",
   "bin": {
     "nodeviewjs": "bin/nodeviewjs.js"

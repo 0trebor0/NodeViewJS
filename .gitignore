@@ -47,6 +47,28 @@ vendor/
 build-bridge-test.*
 native-debug.log
 
+# Local editor and AI tooling
+.agents/
+.codex/
+.vs/
+.vscode/
+.idea/
+*.suo
+*.user
+
+# Operating-system metadata and crash dumps
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.dmp
+
+# Private signing material
+*.key
+*.pem
+*.p12
+*.pfx
+*.snk
+
 # Downloaded native SDK packages
 packages/
 
