@@ -5,7 +5,8 @@ const COLOR_KEYS = ["titleBar", "titleText", "border"];
 
 function normalizeWindowColors(value, fallback) {
   if (value === undefined) return fallback;
-  if (value === null) value = {};
+  const reset = value === null;
+  if (reset) value = {};
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new TypeError("Window colors must be an object or null.");
   }
@@ -14,6 +15,10 @@ function normalizeWindowColors(value, fallback) {
 
   const result = {};
   for (const key of COLOR_KEYS) {
+    if (!reset && value[key] === undefined && fallback !== undefined) {
+      result[key] = fallback[key];
+      continue;
+    }
     const color = value[key] ?? null;
     if (color !== null && (typeof color !== "string" || !COLOR_PATTERN.test(color))) {
       throw new TypeError(`Window ${key} color must use #RRGGBB format or be null.`);

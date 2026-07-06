@@ -498,7 +498,7 @@ class AppWindow {
   }
 
   setWindowColors(colors = {}) {
-    const normalized = normalizeWindowColors(colors);
+    const normalized = normalizeWindowColors(colors, this.options.windowColors);
     this.options.windowColors = normalized;
     if (this.#id !== undefined) {
       if (typeof native().setWindowColors !== "function") {

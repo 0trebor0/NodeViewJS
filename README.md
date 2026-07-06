@@ -736,7 +736,15 @@ app.setWindowColors({ titleBar: "#24324a", titleText: "#ffffff", border: "#60a5f
 console.log(app.mainWindow.getState().windowColorsSupported);
 ```
 
-Pass `null` for a color, or for the complete `windowColors` value, to restore the system default. Microsoft exposes arbitrary native chrome colors only on Windows 11; on Windows 10, `windowColorsSupported` is `false`. Use `frame: false` and the HTML/CSS custom title-bar approach below when full color control is required on Windows 10.
+The available keys are:
+
+- `titleBar`: native title-bar background.
+- `titleText`: native window-title text.
+- `border`: native outer border.
+
+Runtime updates preserve colors that are not supplied. Pass `null` for one key to reset only that color, or call `app.setWindowColors(null)` to restore all system defaults. Check `app.mainWindow.getState().windowColorsSupported` after `app.run()` before relying on native colors.
+
+Microsoft exposes arbitrary native chrome colors only on Windows 11. On Windows 10, `windowColorsSupported` is `false`; use `frame: false` and the HTML/CSS custom title-bar instructions below for full color control.
 
 ```js
 const app = new App({
@@ -781,17 +789,90 @@ The same methods are available on each `AppWindow`. Progress values range from `
 
 ### Custom title bars
 
-For a custom title bar, register a permission-gated backend command and call `startDrag()` when the user presses its draggable area:
+Custom HTML/CSS chrome works on Windows 10 and 11. Disable the native frame and register permission-gated backend commands in `app.js`:
 
 ```js
+const app = new App({
+  entry: "index.html",
+  frame: false
+});
+
 app.command("window:startDrag", {
   permission: "window:control"
 }, () => {
   app.mainWindow.startDrag();
+  return true;
 });
+
+app.command("window:minimize", {
+  permission: "window:control"
+}, () => {
+  app.mainWindow.minimize();
+  return true;
+});
+
+app.command("window:close", {
+  permission: "window:control"
+}, () => {
+  setImmediate(() => app.mainWindow.close());
+  return true;
+});
+
+app.run();
 ```
 
-The frontend can call `NodeViewJS.invoke("window:startDrag")`. Keep an explicit close control wired to trusted backend code, such as an app command that schedules `app.mainWindow.close()` after returning its response.
+Create the colored title bar in `index.html`:
+
+```html
+<style>
+  html, body { margin: 0; min-height: 100%; }
+  body {
+    min-height: 100vh;
+    box-sizing: border-box;
+    border: 1px solid #3b82f6;
+  }
+  .titlebar {
+    height: 36px;
+    display: flex;
+    align-items: center;
+    color: #ffffff;
+    background: #162033;
+    border-bottom: 1px solid #3b82f6;
+    user-select: none;
+  }
+  .titlebar-title { flex: 1; padding-left: 12px; }
+  .titlebar button {
+    width: 46px;
+    height: 36px;
+    border: 0;
+    color: inherit;
+    background: transparent;
+  }
+  .titlebar button:hover { background: #2b3b58; }
+  .titlebar .close:hover { background: #c42b1c; }
+</style>
+
+<header class="titlebar">
+  <span class="titlebar-title">My App</span>
+  <button id="minimize" aria-label="Minimize">&#x2212;</button>
+  <button id="close" class="close" aria-label="Close">&#x2715;</button>
+</header>
+
+<script>
+  document.querySelector(".titlebar").addEventListener("pointerdown", (event) => {
+    if (event.target.closest("button")) return;
+    NodeViewJS.invoke("window:startDrag");
+  });
+  document.querySelector("#minimize").addEventListener("click", () => {
+    NodeViewJS.invoke("window:minimize");
+  });
+  document.querySelector("#close").addEventListener("click", () => {
+    NodeViewJS.invoke("window:close");
+  });
+</script>
+```
+
+Keep the close operation scheduled with `setImmediate()` so the IPC response can finish before the window is destroyed. Add maximize/restore commands using the same pattern when needed.
 
 When using `closeToHide`, you can bring the window back with:
 
@@ -875,7 +956,7 @@ settingsWindow.on("settings-saved", (settings) => {
 app.run();
 ```
 
-Unspecified secondary-window options inherit from the main window. Each window has its own native window, WebView, IPC handler, event methods, menus, and runtime window controls including `show()`, `hide()`, `reload()`, `close()`, `minimize()`, `maximize()`, `restore()`, `setFullscreen()`, `setTitle()`, `setSize()`, `setPosition()`, `startDrag()`, `setMenu()`, `showContextMenu()`, and `getState()`. `app.emit()` broadcasts to every open window, while `window.emit()` targets one window. `app.quit()` closes all windows.
+Unspecified secondary-window options inherit from the main window. Each window has its own native window, WebView, IPC handler, event methods, menus, and runtime window controls including `show()`, `hide()`, `reload()`, `close()`, `minimize()`, `maximize()`, `restore()`, `setFullscreen()`, `setTitle()`, `setWindowColors()`, `setSize()`, `setPosition()`, `startDrag()`, `setMenu()`, `showContextMenu()`, and `getState()`. `app.emit()` broadcasts to every open window, while `window.emit()` targets one window. `app.quit()` closes all windows.
 
 ### System tray
 
@@ -1201,27 +1282,59 @@ Use `app.command()`, `app.on()`, and `app.emit()` for application IPC. Direct us
 
 ### Notification helper
 
-Use `notification.show()` after `app.run()` to display a native Windows notification:
+Set a stable `title`, `appId`, and optional `.ico` file when creating the app. Register handlers, call `app.run()`, and then display the notification:
 
 ```js
-const { notification } = require("nodeviewjs");
+const { App } = require("nodeviewjs");
 
-notification.show({
+const app = new App({
+  title: "My App",
+  appId: "com.example.my-app",
+  icon: "assets/app.ico",
+  entry: "index.html"
+});
+
+app.run();
+
+app.showNotification({
   title: "My App",
   message: "Finished loading."
 });
 ```
 
-You can target an application window explicitly. Clicking its Windows notification restores and focuses that window:
+`notification.show()` targets the primary open window, while window methods let you select a particular window. Clicking a Windows notification restores and focuses its target:
 
 ```js
+const { notification } = require("nodeviewjs");
+
+notification.show({ title: "My App", message: "Background work completed." });
 app.showNotification({ title: "My App", message: "Finished loading." });
 app.mainWindow.showNotification({ title: "Download", message: "Complete." });
+```
+
+To request a notification from frontend code, expose one narrow permission-gated command rather than exposing native helpers directly:
+
+```js
+app.command("notification:show", {
+  permission: "notification:show"
+}, ({ title, message }) => {
+  app.showNotification({ title, message });
+  return true;
+});
+```
+
+```js
+await NodeViewJS.invoke("notification:show", {
+  title: "My App",
+  message: "Saved successfully."
+});
 ```
 
 Titles are limited to 63 characters and messages to 255 characters. Windows notification settings, Do Not Disturb, and Focus Assist can still suppress presentation. NodeViewJS uses the app icon when available and retries registration if Windows Explorer has restarted.
 
 NodeViewJS assigns Windows an explicit identity derived from `appId`, registers its display name for the current user, and sends notifications through Windows' AUMID-addressed toast API. Notifications and taskbar grouping therefore use your configured app title instead of displaying `Node.js JavaScript Runtime`. Keep `appId` and `title` stable between releases. Installed apps remove this notification identity when uninstalled. The legacy notification-area balloon is retained only as a compatibility fallback when the Windows toast API is unavailable.
+
+If a notification does not appear, confirm that the app is still running and check Windows Settings > System > Notifications, Do Not Disturb, and Focus Assist. If the header shows an old name after changing `title`, keep the same title for that `appId` or choose a new stable `appId`; Windows caches notification identity by AUMID.
 
 Dialog and notification helpers are trusted backend APIs and are not exposed directly to the WebView. Frontend-triggered use should go through registered commands requiring the relevant `dialog:open`, `dialog:save`, or `notification:show` permission.
 
