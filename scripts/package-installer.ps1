@@ -11,6 +11,7 @@ $packageJson = Get-Content (Join-Path $root "package.json") -Raw | ConvertFrom-J
 $config = $packageJson.nodeviewjs
 $metadata = $config.metadata
 $appName = if ($config.name) { [string]$config.name } else { "NodeViewDemo" }
+$appId = if ($config.appId) { [string]$config.appId } else { [string]$packageJson.name }
 $version = if ($metadata.version) { [string]$metadata.version } else { [string]$packageJson.version }
 $publisher = if ($metadata.companyName) { [string]$metadata.companyName } else { "NodeViewJS" }
 if ($appName -notmatch '^[A-Za-z0-9][A-Za-z0-9._ -]*$' -or
@@ -22,6 +23,11 @@ if ($version -notmatch '^[A-Za-z0-9][A-Za-z0-9._+-]*$') {
   throw "Package version contains characters that are unsafe for an installer filename."
 }
 $registryId = ($appName -replace '[^a-zA-Z0-9._-]', '_')
+$identityModule = Join-Path $runtimeRoot "runtime\data-directory.js"
+$appUserModelId = (& node -e "process.stdout.write(require(process.argv[1]).resolveAppUserModelId(process.argv[2]))" $identityModule $appId | Out-String).Trim()
+if ($LASTEXITCODE -ne 0 -or !$appUserModelId) {
+  throw "Could not resolve the Windows AppUserModelID."
+}
 $associationJson = (& node (Join-Path $runtimeRoot "scripts\normalize-associations.js") --project-root $root | Out-String).Trim()
 if ($LASTEXITCODE -ne 0 -or !$associationJson) {
   throw "Could not validate nodeviewjs protocols and fileAssociations."
@@ -131,6 +137,7 @@ $appName = __APP_NAME__
 $version = __VERSION__
 $publisher = __PUBLISHER__
 $registryId = __REGISTRY_ID__
+$appUserModelId = __APP_USER_MODEL_ID__
 $associationsBase64 = __ASSOCIATIONS_BASE64__
 $installRoot = Join-Path $env:LOCALAPPDATA ("Programs\" + $registryId)
 $pendingRoot = "$installRoot.update-pending"
@@ -138,6 +145,7 @@ $backupRoot = "$installRoot.update-backup"
 $archive = Join-Path $PSScriptRoot "payload.zip"
 $shortcutPath = Join-Path $env:APPDATA ("Microsoft\Windows\Start Menu\Programs\" + $appName + ".lnk")
 $registryPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\" + $registryId
+$notificationIdentityPath = "HKCU:\Software\Classes\AppUserModelId\" + $appUserModelId
 $associationScript = Join-Path $PSScriptRoot "windows-associations.ps1"
 $appExecutable = Join-Path $installRoot ($appName + ".exe")
 
@@ -152,7 +160,9 @@ if (Test-Path $backupRoot) {
 $hadInstall = Test-Path $installRoot
 $hadShortcut = Test-Path $shortcutPath
 $hadRegistration = Test-Path $registryPath
+$hadNotificationIdentity = Test-Path $notificationIdentityPath
 $previousRegistration = if ($hadRegistration) { Get-ItemProperty $registryPath } else { $null }
+$previousNotificationIdentity = if ($hadNotificationIdentity) { Get-ItemProperty $notificationIdentityPath } else { $null }
 $replacementActivated = $false
 $associationsStarted = $false
 
@@ -187,6 +197,10 @@ try {
   Set-ItemProperty -Path $registryPath -Name NoModify -Value 1 -Type DWord
   Set-ItemProperty -Path $registryPath -Name NoRepair -Value 1 -Type DWord
 
+  New-Item -Path $notificationIdentityPath -Force | Out-Null
+  Set-ItemProperty -Path $notificationIdentityPath -Name DisplayName -Value $appName
+  Set-ItemProperty -Path $notificationIdentityPath -Name IconUri -Value $appExecutable
+
   $associationsStarted = $true
   & (Join-Path $installRoot "windows-associations.ps1") -Action Register -AppName $appName -RegistryId $registryId -Executable $appExecutable -AssociationsBase64 $associationsBase64
 
@@ -215,6 +229,16 @@ try {
   } else {
     Remove-Item -LiteralPath $registryPath -Recurse -Force -ErrorAction SilentlyContinue
   }
+  if ($hadNotificationIdentity) {
+    New-Item -Path $notificationIdentityPath -Force | Out-Null
+    foreach ($name in @("DisplayName", "IconUri")) {
+      if ($null -ne $previousNotificationIdentity.$name) {
+        Set-ItemProperty -Path $notificationIdentityPath -Name $name -Value $previousNotificationIdentity.$name
+      }
+    }
+  } else {
+    Remove-Item -LiteralPath $notificationIdentityPath -Recurse -Force -ErrorAction SilentlyContinue
+  }
   if (!$hadShortcut) {
     Remove-Item -LiteralPath $shortcutPath -Force -ErrorAction SilentlyContinue
   }
@@ -226,6 +250,7 @@ $uninstallTemplate = @'
 $ErrorActionPreference = "SilentlyContinue"
 $appName = __APP_NAME__
 $registryId = __REGISTRY_ID__
+$appUserModelId = __APP_USER_MODEL_ID__
 $associationsBase64 = __ASSOCIATIONS_BASE64__
 $installRoot = $PSScriptRoot
 $appExecutable = Join-Path $installRoot ($appName + ".exe")
@@ -237,6 +262,7 @@ if (Test-Path -LiteralPath $associationScript) {
 }
 Remove-Item -LiteralPath (Join-Path $env:APPDATA ("Microsoft\Windows\Start Menu\Programs\" + $appName + ".lnk")) -Force
 Remove-Item -LiteralPath ("HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\" + $registryId) -Recurse -Force
+Remove-Item -LiteralPath ("HKCU:\Software\Classes\AppUserModelId\" + $appUserModelId) -Recurse -Force
 
 $quotedRoot = "'" + $installRoot.Replace("'", "''") + "'"
 $cleanup = "Start-Sleep -Milliseconds 500; Remove-Item -LiteralPath $quotedRoot -Recurse -Force"
@@ -250,6 +276,7 @@ $replacements = @{
   "__VERSION__" = Convert-ToPowerShellLiteral $version
   "__PUBLISHER__" = Convert-ToPowerShellLiteral $publisher
   "__REGISTRY_ID__" = Convert-ToPowerShellLiteral $registryId
+  "__APP_USER_MODEL_ID__" = Convert-ToPowerShellLiteral $appUserModelId
   "__ASSOCIATIONS_BASE64__" = Convert-ToPowerShellLiteral $associationBase64
 }
 foreach ($key in $replacements.Keys) {

@@ -5,8 +5,13 @@
 
 #include <windows.h>
 #include <commdlg.h>
+#include <dwmapi.h>
 #include <shellapi.h>
 #include <shobjidl.h>
+
+#include <winrt/Windows.Data.Xml.Dom.h>
+#include <winrt/Windows.Foundation.h>
+#include <winrt/Windows.UI.Notifications.h>
 
 #include <cmath>
 #include <iomanip>
@@ -30,6 +35,8 @@ struct WindowState {
   std::wstring entry_file;
   std::wstring webview_data_directory;
   std::wstring app_user_model_id;
+  std::wstring notification_display_name;
+  std::wstring notification_icon_path;
   bool webview_started = false;
   int min_width = 0;
   int min_height = 0;
@@ -47,7 +54,13 @@ struct WindowState {
   bool transparent = false;
   bool bridge_embedded = false;
   bool notification_icon_added = false;
+  bool notification_identity_registered = false;
+  bool window_colors_supported = false;
+  int title_bar_color = -1;
+  int title_text_color = -1;
+  int border_color = -1;
   std::uint32_t notification_count = 0;
+  std::string notification_transport = "none";
   bool tray_icon_added = false;
   HICON window_icon = nullptr;
   HICON tray_icon = nullptr;
@@ -77,6 +90,7 @@ constexpr UINT kNotificationIconId = 1;
 constexpr UINT kTrayIconId = 2;
 constexpr UINT kNotificationCallbackMessage = WM_APP + 1;
 constexpr UINT kTrayCallbackMessage = WM_APP + 2;
+constexpr UINT kNotificationActivatedMessage = WM_APP + 3;
 constexpr UINT kTrayShowCommand = 1001;
 constexpr UINT kTrayQuitCommand = 1002;
 constexpr UINT kFirstMenuCommand = 2000;
@@ -85,6 +99,9 @@ constexpr UINT kFirstTrayMenuCommand = 0xf000;
 constexpr UINT kLastTrayMenuCommand = 0xffef;
 constexpr COLORREF kTransparentColorKey = RGB(1, 0, 1);
 constexpr int kHoverFrameRevealHeight = 8;
+constexpr DWORD kDwmBorderColor = 34;
+constexpr DWORD kDwmCaptionColor = 35;
+constexpr DWORD kDwmTextColor = 36;
 
 std::string FormatHResult(HRESULT result) {
   std::ostringstream message;
@@ -189,6 +206,81 @@ void ClearApplicationMenu(nodeview::NativeWindow& native_window) {
     state.accelerator_table = nullptr;
   }
   state.menu_commands.clear();
+}
+
+void RegisterNotificationIdentity(nodeview::NativeWindow& native_window, Napi::Env env) {
+  auto& state = native_window.State();
+  if (state.notification_identity_registered || state.app_user_model_id.empty()) return;
+  if (state.app_user_model_id.find_first_of(L"\\/") != std::wstring::npos) {
+    throw Napi::TypeError::New(env, "Windows AppUserModelID cannot contain path separators.");
+  }
+
+  const std::wstring key_path =
+      L"Software\\Classes\\AppUserModelId\\" + state.app_user_model_id;
+  HKEY key = nullptr;
+  LONG result = RegCreateKeyExW(
+      HKEY_CURRENT_USER,
+      key_path.c_str(),
+      0,
+      nullptr,
+      REG_OPTION_NON_VOLATILE,
+      KEY_SET_VALUE,
+      nullptr,
+      &key,
+      nullptr);
+  if (result == ERROR_SUCCESS) {
+    result = RegSetValueExW(
+        key,
+        L"DisplayName",
+        0,
+        REG_SZ,
+        reinterpret_cast<const BYTE*>(state.notification_display_name.c_str()),
+        static_cast<DWORD>((state.notification_display_name.size() + 1) * sizeof(wchar_t)));
+  }
+  if (result == ERROR_SUCCESS && !state.notification_icon_path.empty()) {
+    result = RegSetValueExW(
+        key,
+        L"IconUri",
+        0,
+        REG_SZ,
+        reinterpret_cast<const BYTE*>(state.notification_icon_path.c_str()),
+        static_cast<DWORD>((state.notification_icon_path.size() + 1) * sizeof(wchar_t)));
+  }
+  if (key != nullptr) RegCloseKey(key);
+  if (result != ERROR_SUCCESS) {
+    throw Napi::Error::New(
+        env,
+        "Could not register the Windows notification identity (error " +
+            std::to_string(result) + ").");
+  }
+  state.notification_identity_registered = true;
+}
+
+bool ShowWindowsToast(
+    nodeview::NativeWindow& native_window,
+    const std::wstring& title,
+    const std::wstring& message) {
+  auto& state = native_window.State();
+  try {
+    using namespace winrt::Windows::Data::Xml::Dom;
+    using namespace winrt::Windows::UI::Notifications;
+
+    XmlDocument document = ToastNotificationManager::GetTemplateContent(
+        ToastTemplateType::ToastText02);
+    XmlNodeList text_nodes = document.GetElementsByTagName(L"text");
+    text_nodes.Item(0).AppendChild(document.CreateTextNode(title));
+    text_nodes.Item(1).AppendChild(document.CreateTextNode(message));
+
+    ToastNotification toast(document);
+    const HWND window = state.window;
+    toast.Activated([window](const ToastNotification&, const winrt::Windows::Foundation::IInspectable&) {
+      if (IsWindow(window)) PostMessageW(window, kNotificationActivatedMessage, 0, 0);
+    });
+    ToastNotificationManager::CreateToastNotifier(state.app_user_model_id).Show(toast);
+    return true;
+  } catch (const winrt::hresult_error&) {
+    return false;
+  }
 }
 
 void ClearTrayMenu(nodeview::NativeWindow& native_window) {
@@ -389,6 +481,9 @@ LRESULT CALLBACK WindowProcedure(HWND window, UINT message, WPARAM w_param, LPAR
       if (LOWORD(l_param) == NIN_BALLOONUSERCLICK || LOWORD(l_param) == WM_LBUTTONUP) {
         ShowAppWindow(*native_window);
       }
+      return 0;
+    case kNotificationActivatedMessage:
+      ShowAppWindow(*native_window);
       return 0;
     default:
       return DefWindowProc(window, message, w_param, l_param);
@@ -611,6 +706,7 @@ void NativeWindow::Create(const Napi::Object& options) {
   auto& g_state = *state_;
   const Napi::Env env = options.Env();
   const std::wstring title = GetRequiredString(options, "title");
+  g_state.notification_display_name = title;
   g_state.app_user_model_id = GetOptionalString(options, "appUserModelId");
   if (!g_state.app_user_model_id.empty()) {
     const HRESULT identity_result =
@@ -620,6 +716,7 @@ void NativeWindow::Create(const Napi::Object& options) {
     }
   }
   const std::wstring icon_path = GetOptionalString(options, "icon");
+  g_state.notification_icon_path = icon_path;
   g_state.webview_data_directory = GetOptionalString(options, "dataDirectory");
   const int width = GetDimension(options, "width", 800);
   const int height = GetDimension(options, "height", 600);
@@ -689,6 +786,14 @@ void NativeWindow::Create(const Napi::Object& options) {
 
   if (g_state.window == nullptr) {
     throw Napi::Error::New(env, "Could not create the NodeView window.");
+  }
+
+  const Napi::Value window_colors = options.Get("windowColors");
+  if (!window_colors.IsUndefined()) {
+    if (!window_colors.IsObject() || window_colors.IsArray()) {
+      throw Napi::TypeError::New(env, "Window colors must be an object.");
+    }
+    SetWindowColors(env, window_colors.As<Napi::Object>());
   }
 
   if (g_state.frame_visible && !g_state.closable) {
@@ -827,6 +932,57 @@ void NativeWindow::SetTitle(const Napi::Value& value) {
   SetWindowText(state_->window, title.c_str());
 }
 
+void NativeWindow::SetWindowColors(Napi::Env env, const Napi::Object& colors) {
+  auto& state = *state_;
+  struct ColorSetting {
+    const char* name;
+    DWORD attribute;
+    int* stored;
+  };
+  const ColorSetting settings[] = {
+      {"titleBar", kDwmCaptionColor, &state.title_bar_color},
+      {"titleText", kDwmTextColor, &state.title_text_color},
+      {"border", kDwmBorderColor, &state.border_color}};
+
+  state.window_colors_supported = true;
+  for (const auto& setting : settings) {
+    const Napi::Value value = colors.Get(setting.name);
+    if (!value.IsNull() && !value.IsNumber()) {
+      throw Napi::TypeError::New(
+          env,
+          std::string("Window color '") + setting.name + "' must be a number or null.");
+    }
+    int rgb = -1;
+    COLORREF color = 0xffffffff;
+    if (value.IsNumber()) {
+      const double number = value.As<Napi::Number>().DoubleValue();
+      if (!std::isfinite(number) || number < 0 || number > 0xffffff ||
+          std::floor(number) != number) {
+        throw Napi::RangeError::New(
+            env,
+            std::string("Window color '") + setting.name + "' is invalid.");
+      }
+      rgb = static_cast<int>(number);
+      color = RGB((rgb >> 16) & 0xff, (rgb >> 8) & 0xff, rgb & 0xff);
+    }
+    *setting.stored = rgb;
+    const HRESULT result = DwmSetWindowAttribute(
+        state.window,
+        static_cast<DWMWINDOWATTRIBUTE>(setting.attribute),
+        &color,
+        sizeof(color));
+    if (result == E_INVALIDARG) {
+      state.window_colors_supported = false;
+      continue;
+    }
+    if (FAILED(result)) {
+      throw Napi::Error::New(
+          env,
+          "Could not set native window colors (HRESULT:" + FormatHResult(result) + ").");
+    }
+  }
+}
+
 void NativeWindow::SetSize(Napi::Env env, int width, int height) {
   auto& state = *state_;
   if (state.fullscreen) {
@@ -904,6 +1060,17 @@ Napi::Object NativeWindow::GetState(Napi::Env env) {
   result.Set("taskbarProgressValue", Napi::Number::New(env, state.taskbar_progress_value));
   result.Set("hasTaskbarOverlay", Napi::Boolean::New(env, state.taskbar_overlay));
   result.Set("notificationCount", Napi::Number::New(env, state.notification_count));
+  result.Set("notificationTransport", Napi::String::New(env, state.notification_transport));
+  result.Set("windowColorsSupported", Napi::Boolean::New(env, state.window_colors_supported));
+  Napi::Object colors = Napi::Object::New(env);
+  const auto set_color = [&](const char* name, int value) {
+    if (value < 0) colors.Set(name, env.Null());
+    else colors.Set(name, Napi::Number::New(env, value));
+  };
+  set_color("titleBar", state.title_bar_color);
+  set_color("titleText", state.title_text_color);
+  set_color("border", state.border_color);
+  result.Set("windowColors", colors);
   return result;
 }
 
@@ -1219,6 +1386,13 @@ void NativeWindow::ShowNotification(const Napi::Object& options) {
 
   const std::wstring title = GetRequiredString(options, "title");
   const std::wstring message = GetRequiredString(options, "message");
+  RegisterNotificationIdentity(*this, env);
+
+  if (ShowWindowsToast(*this, title, message)) {
+    g_state.notification_transport = "windows-toast";
+    ++g_state.notification_count;
+    return;
+  }
 
   const HICON icon = g_state.window_icon != nullptr
       ? g_state.window_icon
@@ -1263,6 +1437,7 @@ void NativeWindow::ShowNotification(const Napi::Object& options) {
       throw Napi::Error::New(env, "Could not show the notification.");
     }
   }
+  g_state.notification_transport = "legacy-balloon";
   ++g_state.notification_count;
 }
 
@@ -1462,6 +1637,16 @@ void SetNativeWindowTitle(const Napi::CallbackInfo& info) {
         info.Env(), "setWindowTitle expects a window id and title string.");
   }
   GetRuntime().Window(info.Env(), GetWindowId(info, 0)).SetTitle(info[1]);
+}
+
+void SetNativeWindowColors(const Napi::CallbackInfo& info) {
+  if (info.Length() != 2 || !info[1].IsObject() || info[1].IsArray()) {
+    throw Napi::TypeError::New(
+        info.Env(), "setWindowColors expects a window id and colors object.");
+  }
+  GetRuntime()
+      .Window(info.Env(), GetWindowId(info, 0))
+      .SetWindowColors(info.Env(), info[1].As<Napi::Object>());
 }
 
 void SetNativeWindowSize(const Napi::CallbackInfo& info) {

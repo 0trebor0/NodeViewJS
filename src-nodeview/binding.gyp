@@ -33,10 +33,13 @@
           "defines": ["UNICODE", "_UNICODE", "WIN32_LEAN_AND_MEAN"],
           "libraries": [
             "user32.lib",
+            "advapi32.lib",
             "comdlg32.lib",
+            "dwmapi.lib",
             "ole32.lib",
             "shell32.lib",
             "shlwapi.lib",
+            "windowsapp.lib",
             "<(module_root_dir)/../vendor/webview2/Microsoft.Web.WebView2.1.0.3800.47/build/native/x64/WebView2LoaderStatic.lib"
           ],
           "msvs_settings": {

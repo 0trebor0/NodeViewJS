@@ -45,7 +45,12 @@ if (process.platform === "win32") {
     frameOnHover: true,
     closable: false,
     minimizable: false,
-    maximizable: false
+    maximizable: false,
+    windowColors: {
+      titleBar: 0x112233,
+      titleText: 0xffffff,
+      border: 0x445566
+    }
   });
   const initialControlsState = native.getWindowState(controlsWindow);
   assert.deepEqual(
@@ -68,6 +73,18 @@ if (process.platform === "win32") {
   assert.equal(initialControlsState.appUserModelId, "NodeViewJS.NativeLifecycle.Test");
   assert.equal(initialControlsState.taskbarProgressValue, 0);
   assert.equal(initialControlsState.hasTaskbarOverlay, false);
+  assert.equal(typeof initialControlsState.windowColorsSupported, "boolean");
+  assert.deepEqual(initialControlsState.windowColors, {
+    titleBar: 0x112233,
+    titleText: 0xffffff,
+    border: 0x445566
+  });
+  native.setWindowColors(controlsWindow, {
+    titleBar: 0xabcdef,
+    titleText: null,
+    border: null
+  });
+  assert.equal(native.getWindowState(controlsWindow).windowColors.titleBar, 0xabcdef);
   native.setWindowTitle(controlsWindow, "Updated Controls Test");
   native.setWindowSize(controlsWindow, 640, 360);
   native.setWindowPosition(controlsWindow, 25, 30);

@@ -18,6 +18,8 @@ app.showNotification({
 
 const state = app.mainWindow.getState();
 fs.writeFileSync(process.env.NODEVIEW_NOTIFICATION_RESULT, JSON.stringify({
-  notificationCount: state.notificationCount
+  notificationCount: state.notificationCount,
+  appUserModelId: state.appUserModelId,
+  notificationTransport: state.notificationTransport
 }));
 app.quit();

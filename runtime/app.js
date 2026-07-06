@@ -21,6 +21,7 @@ const {
 const { normalizeNotificationOptions } = require("./notification");
 const { SingleInstanceCoordinator } = require("./single-instance");
 const { normalizeAttentionType, normalizeOverlay, normalizeProgress } = require("./taskbar");
+const { normalizeWindowColors } = require("./window-colors");
 
 const COMMAND_PERMISSIONS = new Set([
   "fs:read",
@@ -277,6 +278,7 @@ function resolveWindowOptions(options, fallback = {}, owner = "Window") {
     alwaysOnTop: options.alwaysOnTop ?? fallback.alwaysOnTop ?? false,
     closeToHide: options.closeToHide ?? fallback.closeToHide ?? false,
     transparent: options.transparent ?? fallback.transparent ?? false,
+    windowColors: normalizeWindowColors(options.windowColors, fallback.windowColors),
     devtools: options.devtools ?? fallback.devtools ?? false,
     startupTiming: options.startupTiming ?? fallback.startupTiming ?? process.env.NODEVIEW_STARTUP_TIMING === "1",
     singleInstance,
@@ -495,6 +497,18 @@ class AppWindow {
     return this;
   }
 
+  setWindowColors(colors = {}) {
+    const normalized = normalizeWindowColors(colors);
+    this.options.windowColors = normalized;
+    if (this.#id !== undefined) {
+      if (typeof native().setWindowColors !== "function") {
+        throw new Error("Native window colors are currently available only on Windows.");
+      }
+      native().setWindowColors(this.#id, normalized);
+    }
+    return this;
+  }
+
   showNotification(options) {
     const notification = normalizeNotificationOptions(options);
     if (this.#id === undefined) throw new Error("Window has not been opened.");
@@ -541,6 +555,7 @@ class AppWindow {
       alwaysOnTop: this.options.alwaysOnTop,
       closeToHide: this.options.closeToHide,
       transparent: this.options.transparent,
+      windowColors: this.options.windowColors,
       devtools: this.options.devtools,
       bridgeEmbedded: process.env.NODEVIEW_BRIDGE_EMBEDDED === "1",
       icon: this.options.icon,
@@ -954,6 +969,11 @@ class App {
 
   setMenu(template) {
     this.#mainWindow.setMenu(template);
+    return this;
+  }
+
+  setWindowColors(colors = {}) {
+    this.#mainWindow.setWindowColors(colors);
     return this;
   }
 

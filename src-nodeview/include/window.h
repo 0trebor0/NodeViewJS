@@ -33,6 +33,7 @@ class NativeWindow {
   void Restore(Napi::Env env);
   void SetFullscreen(Napi::Env env, bool fullscreen);
   void SetTitle(const Napi::Value& value);
+  void SetWindowColors(Napi::Env env, const Napi::Object& colors);
   void SetSize(Napi::Env env, int width, int height);
   void SetPosition(Napi::Env env, int x, int y);
   void StartDrag();

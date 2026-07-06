@@ -49,6 +49,11 @@ const windowOptionsApp = new App({
   alwaysOnTop: true,
   closeToHide: true,
   transparent: true,
+  windowColors: {
+    titleBar: "#112233",
+    titleText: "#ffffff",
+    border: "#445566"
+  },
   frame: false,
   frameOnHover: true,
   closable: false,
@@ -189,6 +194,8 @@ assert.equal(secondaryWindow.restore(), secondaryWindow);
 assert.equal(secondaryWindow.setFullscreen(), secondaryWindow);
 assert.equal(secondaryWindow.setTitle("Renamed Secondary"), secondaryWindow);
 assert.equal(secondaryWindow.options.title, "Renamed Secondary");
+assert.equal(secondaryWindow.setWindowColors({ titleBar: "#123456" }), secondaryWindow);
+assert.equal(secondaryWindow.options.windowColors.titleBar, 0x123456);
 assert.equal(secondaryWindow.setSize(640, 360), secondaryWindow);
 assert.equal(secondaryWindow.options.width, 640);
 assert.equal(secondaryWindow.options.height, 360);
@@ -216,6 +223,11 @@ assert.equal(windowOptionsApp.options.maximized, true);
 assert.equal(windowOptionsApp.options.alwaysOnTop, true);
 assert.equal(windowOptionsApp.options.closeToHide, true);
 assert.equal(windowOptionsApp.options.transparent, true);
+assert.deepEqual(windowOptionsApp.options.windowColors, {
+  titleBar: 0x112233,
+  titleText: 0xffffff,
+  border: 0x445566
+});
 assert.equal(windowOptionsApp.options.frame, false);
 assert.equal(windowOptionsApp.options.frameOnHover, true);
 assert.equal(windowOptionsApp.options.closable, false);
@@ -229,6 +241,10 @@ assert.equal(
 assert.throws(
   () => new App({ entry: __filename, frame: false, frameOnHover: "yes" }),
   /must be a boolean/
+);
+assert.throws(
+  () => new App({ entry: __filename, windowColors: { titleBar: "blue" } }),
+  /#RRGGBB/
 );
 assert.equal(windowOptionsApp.options.tray.title, "NodeViewJS");
 assert.equal(windowOptionsApp.options.startupTiming, true);

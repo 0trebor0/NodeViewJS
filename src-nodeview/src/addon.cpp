@@ -14,6 +14,7 @@ Napi::Object Initialize(Napi::Env env, Napi::Object exports) {
   exports.Set("restoreWindow", Napi::Function::New(env, nodeview::RestoreNativeWindow));
   exports.Set("setWindowFullscreen", Napi::Function::New(env, nodeview::SetNativeWindowFullscreen));
   exports.Set("setWindowTitle", Napi::Function::New(env, nodeview::SetNativeWindowTitle));
+  exports.Set("setWindowColors", Napi::Function::New(env, nodeview::SetNativeWindowColors));
   exports.Set("setWindowSize", Napi::Function::New(env, nodeview::SetNativeWindowSize));
   exports.Set("setWindowPosition", Napi::Function::New(env, nodeview::SetNativeWindowPosition));
   exports.Set("startWindowDrag", Napi::Function::New(env, nodeview::StartNativeWindowDrag));

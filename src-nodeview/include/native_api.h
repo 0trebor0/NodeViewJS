@@ -14,6 +14,7 @@ void MaximizeNativeWindow(const Napi::CallbackInfo& info);
 void RestoreNativeWindow(const Napi::CallbackInfo& info);
 void SetNativeWindowFullscreen(const Napi::CallbackInfo& info);
 void SetNativeWindowTitle(const Napi::CallbackInfo& info);
+void SetNativeWindowColors(const Napi::CallbackInfo& info);
 void SetNativeWindowSize(const Napi::CallbackInfo& info);
 void SetNativeWindowPosition(const Napi::CallbackInfo& info);
 void StartNativeWindowDrag(const Napi::CallbackInfo& info);

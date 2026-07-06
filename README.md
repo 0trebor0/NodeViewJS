@@ -686,6 +686,7 @@ const app = new App({
   alwaysOnTop: false,
   closeToHide: false,
   transparent: false,
+  windowColors: null,
   tray: false,
   menu: null,
   singleInstance: false,
@@ -719,6 +720,24 @@ Set `closeToHide: true` if clicking the window close button should hide the wind
 
 On Windows, set `frame: false` to hide the native title bar, system menu, and caption buttons. Set `frameOnHover: true` to reveal that native frame when the pointer reaches the top edge and hide it again when the pointer leaves. Enabling `frameOnHover` automatically sets `frame` to `false`, including when `frame: true` was supplied. Without `frameOnHover`, the window remains frameless. The `closable`, `minimizable`, and `maximizable` options independently control native window actions when the frame is visible. `closable: false` blocks the native close action, but `window.close()` and `app.quit()` remain available to backend code.
 
+On Windows 11 build 22000 or newer, `windowColors` controls the native title bar, title text, and border using `#RRGGBB` colors:
+
+```js
+const app = new App({
+  entry: "index.html",
+  windowColors: {
+    titleBar: "#162033",
+    titleText: "#ffffff",
+    border: "#3b82f6"
+  }
+});
+
+app.setWindowColors({ titleBar: "#24324a", titleText: "#ffffff", border: "#60a5fa" });
+console.log(app.mainWindow.getState().windowColorsSupported);
+```
+
+Pass `null` for a color, or for the complete `windowColors` value, to restore the system default. Microsoft exposes arbitrary native chrome colors only on Windows 11; on Windows 10, `windowColorsSupported` is `false`. Use `frame: false` and the HTML/CSS custom title-bar approach below when full color control is required on Windows 10.
+
 ```js
 const app = new App({
   entry: "index.html",
@@ -737,6 +756,7 @@ window.restore();
 window.setFullscreen(true);
 window.setFullscreen(false);
 window.setTitle("Updated title");
+window.setWindowColors({ titleBar: "#162033", titleText: "#ffffff", border: "#3b82f6" });
 window.setSize(960, 640);
 window.setPosition(100, 80);
 
@@ -1201,7 +1221,7 @@ app.mainWindow.showNotification({ title: "Download", message: "Complete." });
 
 Titles are limited to 63 characters and messages to 255 characters. Windows notification settings, Do Not Disturb, and Focus Assist can still suppress presentation. NodeViewJS uses the app icon when available and retries registration if Windows Explorer has restarted.
 
-NodeViewJS assigns Windows an explicit identity derived from `appId`, so notifications and taskbar grouping use your application identity instead of displaying `Node.js JavaScript Runtime`. Keep `appId` stable between releases.
+NodeViewJS assigns Windows an explicit identity derived from `appId`, registers its display name for the current user, and sends notifications through Windows' AUMID-addressed toast API. Notifications and taskbar grouping therefore use your configured app title instead of displaying `Node.js JavaScript Runtime`. Keep `appId` and `title` stable between releases. Installed apps remove this notification identity when uninstalled. The legacy notification-area balloon is retained only as a compatibility fallback when the Windows toast API is unavailable.
 
 Dialog and notification helpers are trusted backend APIs and are not exposed directly to the WebView. Frontend-triggered use should go through registered commands requiring the relevant `dialog:open`, `dialog:save`, or `notification:show` permission.
 

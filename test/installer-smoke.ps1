@@ -10,6 +10,7 @@ $packageJson = Get-Content (Join-Path $root "package.json") -Raw | ConvertFrom-J
 $config = $packageJson.nodeviewjs
 $metadata = $config.metadata
 $appName = if ($config.name) { [string]$config.name } else { "NodeViewDemo" }
+$appId = if ($config.appId) { [string]$config.appId } else { [string]$packageJson.name }
 $version = if ($metadata.version) { [string]$metadata.version } else { [string]$packageJson.version }
 $registryId = ($appName -replace '[^a-zA-Z0-9._-]', '_')
 $setup = Join-Path $root "build\installer\$appName-$version-setup.exe"
@@ -17,6 +18,9 @@ $installRoot = Join-Path $env:LOCALAPPDATA "Programs\$registryId"
 $installedExe = Join-Path $installRoot "$appName.exe"
 $shortcut = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\$appName.lnk"
 $registry = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\$registryId"
+$identityModule = Join-Path $runtimeRoot "runtime\data-directory.js"
+$appUserModelId = (& node -e "process.stdout.write(require(process.argv[1]).resolveAppUserModelId(process.argv[2]))" $identityModule $appId | Out-String).Trim()
+$notificationIdentity = "HKCU:\Software\Classes\AppUserModelId\$appUserModelId"
 $staging = Join-Path $root "build\installer\.staging-$registryId"
 $pendingRoot = "$installRoot.update-pending"
 $backupRoot = "$installRoot.update-backup"
@@ -48,6 +52,10 @@ if (!(Test-Path $shortcut)) {
 }
 if (!(Test-Path $registry)) {
   throw "Installer did not create the uninstall registry entry."
+}
+if (!(Test-Path $notificationIdentity) -or
+    (Get-ItemPropertyValue -LiteralPath $notificationIdentity -Name DisplayName) -ne $appName) {
+  throw "Installer did not register the Windows notification display name."
 }
 if (!(Test-Path (Join-Path $installRoot "windows-associations.ps1"))) {
   throw "Installer did not include the association unregistration helper."
@@ -129,7 +137,8 @@ if (!$appProcess.WaitForExit(10000)) {
 
 & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $installRoot "uninstall.ps1")
 $deadline = [DateTime]::UtcNow.AddSeconds(15)
-while (((Test-Path $installRoot) -or (Test-Path $shortcut) -or (Test-Path $registry)) -and [DateTime]::UtcNow -lt $deadline) {
+while (((Test-Path $installRoot) -or (Test-Path $shortcut) -or (Test-Path $registry) -or
+    (Test-Path $notificationIdentity)) -and [DateTime]::UtcNow -lt $deadline) {
   Start-Sleep -Milliseconds 250
 }
 
@@ -141,6 +150,9 @@ if (Test-Path $shortcut) {
 }
 if (Test-Path $registry) {
   throw "Uninstaller did not remove the uninstall registry entry."
+}
+if (Test-Path $notificationIdentity) {
+  throw "Uninstaller did not remove the Windows notification identity."
 }
 
 Remove-Item -LiteralPath $staging -Recurse -Force -ErrorAction SilentlyContinue
