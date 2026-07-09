@@ -42,7 +42,6 @@ if (process.platform === "win32") {
     width: 500,
     height: 300,
     frame: true,
-    frameOnHover: true,
     closable: false,
     minimizable: false,
     maximizable: false,
@@ -56,14 +55,12 @@ if (process.platform === "win32") {
   assert.deepEqual(
     {
       frame: initialControlsState.frame,
-      frameOnHover: initialControlsState.frameOnHover,
       closable: initialControlsState.closable,
       minimizable: initialControlsState.minimizable,
       maximizable: initialControlsState.maximizable
     },
     {
-      frame: false,
-      frameOnHover: true,
+      frame: true,
       closable: false,
       minimizable: false,
       maximizable: false
@@ -119,7 +116,7 @@ if (process.platform === "win32") {
   native.setWindowFullscreen(controlsWindow, false);
   controlsState = native.getWindowState(controlsWindow);
   assert.equal(controlsState.fullscreen, false);
-  assert.equal(controlsState.frame, false);
+  assert.equal(controlsState.frame, true);
   native.closeWindow(controlsWindow);
 
   const nativeFixture = path.join(__dirname, "fixtures", "native-default-profile.js");

@@ -55,7 +55,6 @@ const windowOptionsApp = new App({
     border: "#445566"
   },
   frame: false,
-  frameOnHover: true,
   closable: false,
   minimizable: false,
   maximizable: false,
@@ -229,18 +228,13 @@ assert.deepEqual(windowOptionsApp.options.windowColors, {
   border: 0x445566
 });
 assert.equal(windowOptionsApp.options.frame, false);
-assert.equal(windowOptionsApp.options.frameOnHover, true);
+assert.equal(Object.hasOwn(windowOptionsApp.options, "frameOnHover"), false);
 assert.equal(windowOptionsApp.options.closable, false);
 assert.equal(windowOptionsApp.options.minimizable, false);
 assert.equal(windowOptionsApp.options.maximizable, false);
-assert.equal(new App({ entry: __filename, frameOnHover: true }).options.frame, false);
-assert.equal(
-  new App({ entry: __filename, frame: true, frameOnHover: true }).options.frame,
-  false
-);
 assert.throws(
-  () => new App({ entry: __filename, frame: false, frameOnHover: "yes" }),
-  /must be a boolean/
+  () => new App({ entry: __filename, frameOnHover: true }),
+  /not currently supported/
 );
 assert.throws(
   () => new App({ entry: __filename, windowColors: { titleBar: "blue" } }),

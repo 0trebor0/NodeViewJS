@@ -245,11 +245,10 @@ function resolveWindowOptions(options, fallback = {}, owner = "Window") {
   }
   const appId = resolveAppId(options.appId ?? fallback.appId ?? title);
   const icon = options.icon ?? fallback.icon;
-  const frameOnHover = options.frameOnHover ?? fallback.frameOnHover ?? false;
-  if (typeof frameOnHover !== "boolean") {
-    throw new TypeError(`${owner} frameOnHover must be a boolean.`);
+  if (options.frameOnHover !== undefined || fallback.frameOnHover !== undefined) {
+    throw new TypeError(`${owner} frameOnHover is not currently supported.`);
   }
-  const frame = frameOnHover ? false : options.frame ?? fallback.frame ?? true;
+  const frame = options.frame ?? fallback.frame ?? true;
   const singleInstance = options.singleInstance ?? fallback.singleInstance ?? false;
   if (typeof singleInstance !== "boolean") {
     throw new TypeError(`${owner} singleInstance must be a boolean.`);
@@ -269,7 +268,6 @@ function resolveWindowOptions(options, fallback = {}, owner = "Window") {
     maxWidth: options.maxWidth ?? fallback.maxWidth,
     maxHeight: options.maxHeight ?? fallback.maxHeight,
     frame,
-    frameOnHover,
     closable: options.closable ?? fallback.closable ?? true,
     minimizable: options.minimizable ?? fallback.minimizable ?? true,
     maximizable: options.maximizable ?? fallback.maximizable ?? true,
@@ -546,7 +544,6 @@ class AppWindow {
       maxWidth: this.options.maxWidth,
       maxHeight: this.options.maxHeight,
       frame: this.options.frame,
-      frameOnHover: this.options.frameOnHover,
       closable: this.options.closable,
       minimizable: this.options.minimizable,
       maximizable: this.options.maximizable,

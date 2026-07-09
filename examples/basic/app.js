@@ -47,6 +47,8 @@ const MEDIA_EXTENSIONS = new Set([
   ".flac"
 ]);
 
+const MAX_MEDIA_RESULTS = 100;
+
 function getMediaType(ext) {
   ext = ext.toLowerCase();
 
@@ -88,8 +90,14 @@ function getMediaType(ext) {
 
 async function scanMediaFolder(folderPath) {
   const media = [];
+  let truncated = false;
 
   async function walk(currentFolder) {
+    if (media.length >= MAX_MEDIA_RESULTS) {
+      truncated = true;
+      return;
+    }
+
     let items;
 
     try {
@@ -106,6 +114,10 @@ async function scanMediaFolder(folderPath) {
 
       if (item.isDirectory()) {
         await walk(itemPath);
+        if (media.length >= MAX_MEDIA_RESULTS) {
+          truncated = true;
+          return;
+        }
         continue;
       }
 
@@ -124,12 +136,17 @@ async function scanMediaFolder(folderPath) {
         type: getMediaType(ext),
         extension: ext
       });
+
+      if (media.length >= MAX_MEDIA_RESULTS) {
+        truncated = true;
+        return;
+      }
     }
   }
 
   await walk(folderPath);
 
-  return media;
+  return { media, truncated };
 }
 
 app.command("greet", async (name) => {
@@ -148,13 +165,15 @@ app.command("loadMedia", async ({ folder = "pictures" }) => {
   }
 
   try {
-    const media = await scanMediaFolder(folderPath);
+    const { media, truncated } = await scanMediaFolder(folderPath);
 
     return {
       error: false,
       folder,
       folderPath,
       count: media.length,
+      limit: MAX_MEDIA_RESULTS,
+      truncated,
       media
     };
   } catch (error) {
@@ -167,7 +186,11 @@ app.command("loadMedia", async ({ folder = "pictures" }) => {
 });
 
 app.run();
-app.showNotification({
-  title: "My App",
-  message: "The application is ready."
-});
+try {
+  app.showNotification({
+    title: "My App",
+    message: "The application is ready."
+  });
+} catch (error) {
+  console.warn(`[NodeViewJS demo] Notification unavailable: ${error.message}`);
+}

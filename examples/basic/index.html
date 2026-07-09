@@ -131,7 +131,9 @@
             return;
           }
 
-          output.textContent = `Loaded ${result.count} media file(s) from ${result.folderPath}`;
+          output.textContent = result.truncated
+            ? `Showing first ${result.count} media file(s) from ${result.folderPath}. Narrow the folder or add paging to load more.`
+            : `Loaded ${result.count} media file(s) from ${result.folderPath}`;
 
           if (!result.media.length) {
             mediaContainer.innerHTML = `

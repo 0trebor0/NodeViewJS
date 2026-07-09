@@ -201,7 +201,14 @@ if (process.platform === "win32" && !skipNativeRebuild) {
   });
 
   const packagedBridgeResult = path.join(packagedRoot, "app", "bridge-result.txt");
-  const launched = spawnSync(packagedExe, [], { encoding: "utf8", timeout: 20_000 });
+  const launched = spawnSync(packagedExe, [], {
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      LOCALAPPDATA: path.join(fixture, "local-app-data")
+    },
+    timeout: 20_000
+  });
   assert.equal(launched.error, undefined, launched.error?.message);
   assert.equal(launched.status, 0, launched.stderr);
   assert.equal(fs.readFileSync(packagedBridgeResult, "utf8"), "ready");

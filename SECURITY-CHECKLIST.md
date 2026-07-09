@@ -6,6 +6,7 @@ Run this checklist from a clean release candidate on Windows with Python 3, Visu
 
 - [ ] Run `npm ci` from the committed lockfile.
 - [ ] Run `npm run security:gate` and require a zero exit code.
+- [ ] Confirm the tracked-file secret scan reports no real credentials, tokens, private keys, or certificate material.
 - [ ] Confirm the production dependency audit has no high or critical findings.
 - [ ] Confirm MSVC static analysis builds both the addon and launcher with no errors and the PE hardening test passes.
 - [ ] Confirm malformed IPC and integrity-manifest corpus tests pass.

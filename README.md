@@ -32,7 +32,7 @@ The `v0.1.0` release candidate passes the full GitHub CI matrix and an isolated 
 | Backend commands | Command registration, scoped permissions, multiple requirements, and deny rules | [Commands and permissions](#appcommandname-handler) |
 | Backend events | App-wide broadcasts and targeted window events | [Events](#events) |
 | App lifecycle | Start, quit, show, hide, reload, and close behavior | [App lifecycle](#app-lifecycle) |
-| Window configuration | Size limits, position, title, fullscreen, transparency, native frame, hover frame, close behavior, and custom dragging | [Window options and controls](#window-options-and-controls), [Custom title bars](#custom-title-bars) |
+| Window configuration | Size limits, position, title, fullscreen, transparency, native frame, close behavior, and custom dragging | [Window options and controls](#window-options-and-controls), [Custom title bars](#custom-title-bars) |
 | Multiple windows | Independent WebViews, IPC, events, menus, and lifecycle | [Multiple windows](#multiple-windows) |
 | Desktop UI | System tray, application/context menus, accelerators, taskbar progress, overlays, and attention | [System tray](#system-tray), [Native application menus](#native-application-menus), [Windows taskbar integration](#windows-taskbar-integration) |
 | Launch routing | Single-instance behavior, custom protocols, and file associations | [Single-instance applications](#single-instance-applications), [Deep links and file associations](#deep-links-and-file-associations) |
@@ -677,7 +677,6 @@ const app = new App({
   maxHeight: 1000,
   resizable: true,
   frame: true,
-  frameOnHover: false,
   closable: true,
   minimizable: true,
   maximizable: true,
@@ -718,7 +717,7 @@ Set `transparent: true` to make the WebView canvas and native client area fully 
 
 Set `closeToHide: true` if clicking the window close button should hide the window instead of quitting the app. `app.quit()` still closes the app fully.
 
-On Windows, set `frame: false` to hide the native title bar, system menu, and caption buttons. Set `frameOnHover: true` to reveal that native frame when the pointer reaches the top edge and hide it again when the pointer leaves. Enabling `frameOnHover` automatically sets `frame` to `false`, including when `frame: true` was supplied. Without `frameOnHover`, the window remains frameless. The `closable`, `minimizable`, and `maximizable` options independently control native window actions when the frame is visible. `closable: false` blocks the native close action, but `window.close()` and `app.quit()` remain available to backend code.
+On Windows, set `frame: false` to hide the native title bar, system menu, and caption buttons. The window remains frameless until backend code closes it or your HTML/CSS title bar calls window-control commands. The `closable`, `minimizable`, and `maximizable` options independently control native window actions when the native frame is enabled. `closable: false` blocks the native close action, but `window.close()` and `app.quit()` remain available to backend code.
 
 On Windows 11 build 22000 or newer, `windowColors` controls the native title bar, title text, and border using `#RRGGBB` colors:
 
@@ -745,13 +744,6 @@ The available keys are:
 Runtime updates preserve colors that are not supplied. Pass `null` for one key to reset only that color, or call `app.setWindowColors(null)` to restore all system defaults. Check `app.mainWindow.getState().windowColorsSupported` after `app.run()` before relying on native colors.
 
 Microsoft exposes arbitrary native chrome colors only on Windows 11. On Windows 10, `windowColorsSupported` is `false`; use `frame: false` and the HTML/CSS custom title-bar instructions below for full color control.
-
-```js
-const app = new App({
-  entry: "index.html",
-  frameOnHover: true
-});
-```
 
 Runtime window controls are available through `app.mainWindow` and every window returned by `app.createWindow()`:
 
@@ -1398,10 +1390,16 @@ Full unit, packaging, and CLI regression suite:
 npm test
 ```
 
-Windows dependency audit, warning-as-error native analysis, PE hardening, adversarial package checks, and installer smoke:
+Repository secret scan, Windows dependency audit, warning-as-error native analysis, PE hardening, adversarial package checks, and installer smoke:
 
 ```powershell
 npm run security:gate
+```
+
+To run only the tracked-file secret scanner:
+
+```powershell
+npm run security:repo
 ```
 
 Focused live native integration tests:

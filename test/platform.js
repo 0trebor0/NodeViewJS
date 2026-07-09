@@ -249,10 +249,8 @@ assert.match(
   fs.readFileSync(path.join(root, "src-nodeview", "src", "launcher.cpp"), "utf8"),
   /command \+= command_line/
 );
-assert.match(windowsHost, /GetBoolean\(options, "frameOnHover", false\)/);
-assert.match(windowsHost, /if \(g_state\.frame_on_hover\) g_state\.frame = false/);
-assert.match(windowsHost, /WM_NCMOUSELEAVE/);
-assert.match(windowsHost, /SetHoverFrameVisible/);
+assert.doesNotMatch(windowsHost, /frameOnHover/);
+assert.doesNotMatch(windowsHost, /frame_on_hover/);
 assert.match(windowsHost, /CreateAcceleratorTableW/);
 assert.match(windowsHost, /TrackPopupMenuEx/);
 assert.match(windowsHost, /SetApplicationMenu/);
