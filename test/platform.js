@@ -181,6 +181,7 @@ const linuxLauncher = fs.readFileSync(path.join(root, "src-nodeview", "src", "li
 const associationNormalizer = path.join(root, "scripts", "normalize-associations.js");
 const windowsHost = fs.readFileSync(path.join(root, "src-nodeview", "src", "window.cpp"), "utf8");
 const windowsWebView = fs.readFileSync(path.join(root, "src-nodeview", "src", "webview.cpp"), "utf8");
+const runtimeApp = fs.readFileSync(path.join(root, "runtime", "app.js"), "utf8");
 for (const name of [
   "CreateNativeWindow",
   "CloseNativeWindow",
@@ -249,8 +250,7 @@ assert.match(
   fs.readFileSync(path.join(root, "src-nodeview", "src", "launcher.cpp"), "utf8"),
   /command \+= command_line/
 );
-assert.doesNotMatch(windowsHost, /frameOnHover/);
-assert.doesNotMatch(windowsHost, /frame_on_hover/);
+assert.match(runtimeApp, /frameOnHover is not currently supported/);
 assert.match(windowsHost, /CreateAcceleratorTableW/);
 assert.match(windowsHost, /TrackPopupMenuEx/);
 assert.match(windowsHost, /SetApplicationMenu/);
@@ -304,6 +304,75 @@ assert.deepEqual(JSON.parse(JSON.stringify(posted[0])), {
 });
 assert.equal(Number.isSafeInteger(invocationId), true);
 assert.ok(invocationId > 0);
+
+const postedBeforeHostilePayload = posted.length;
+const hostilePayload = {};
+Object.defineProperty(hostilePayload, "secret", {
+  enumerable: true,
+  get() {
+    throw new Error("hostile bridge getter");
+  }
+});
+const hostileInvocation = window.NodeViewJS.invoke("hostile", hostilePayload).then(
+  () => undefined,
+  (error) => error.message
+);
+assert.equal(posted.length, postedBeforeHostilePayload);
+const throwingToJSONPayload = { value: "safe" };
+Object.defineProperty(throwingToJSONPayload, "toJSON", {
+  get() {
+    throw new Error("hostile bridge toJSON");
+  }
+});
+const throwingToJSONInvocation = window.NodeViewJS.invoke("hostile-json", throwingToJSONPayload).then(
+  () => undefined,
+  (error) => error.message
+);
+assert.equal(posted.length, postedBeforeHostilePayload);
+assert.throws(
+  () => window.NodeViewJS.emit("hostile-event", hostilePayload),
+  /size or complexity limit/
+);
+assert.doesNotThrow(() => window.__nodeviewReceive({
+  version: 1,
+  type: "event",
+  event: "platform-ready",
+  payload: hostilePayload
+}));
+assert.doesNotThrow(() => window.__nodeviewReceive(new Proxy({}, {
+  get(target, property, receiver) {
+    if (property === "version") {
+      throw new Error("hostile bridge message version");
+    }
+    return Reflect.get(target, property, receiver);
+  }
+})));
+const postedBeforeOversizedArray = posted.length;
+const oversizedArrayInvocation = window.NodeViewJS.invoke(
+  "oversized-array",
+  new Array(10001)
+).then(
+  () => undefined,
+  (error) => error.message
+);
+assert.equal(posted.length, postedBeforeOversizedArray);
+const throwingLengthArray = new Proxy([], {
+  get(target, property, receiver) {
+    if (property === "length") {
+      throw new Error("hostile bridge array length");
+    }
+    return Reflect.get(target, property, receiver);
+  }
+});
+const throwingLengthInvocation = window.NodeViewJS.invoke(
+  "throwing-length-array",
+  throwingLengthArray
+).then(
+  () => undefined,
+  (error) => error.message
+);
+assert.equal(posted.length, postedBeforeOversizedArray);
+
 window.__nodeviewReceive({
   version: 1,
   type: "response",
@@ -331,6 +400,17 @@ window.__nodeviewReceive({
   payload: { host: "webkit" }
 });
 assert.deepEqual(JSON.parse(JSON.stringify(eventPayload)), { host: "webkit" });
+window.NodeViewJS.on("throwing-listener", () => {
+  throw new Error("listener failure should escape receive");
+});
+assert.throws(
+  () => window.__nodeviewReceive({
+    version: 1,
+    type: "event",
+    event: "throwing-listener"
+  }),
+  /listener failure/
+);
 
 const queuedInvocations = Array.from({ length: 64 }, (_, index) => (
   window.NodeViewJS.invoke(`queued-${index}`)
@@ -349,8 +429,27 @@ for (const message of posted.filter(({ command }) => command?.startsWith("queued
   });
 }
 
-Promise.all([invocation, ...queuedInvocations, overflowInvocation]).then(([result, ...results]) => {
+Promise.all([
+  invocation,
+  hostileInvocation,
+  throwingToJSONInvocation,
+  oversizedArrayInvocation,
+  throwingLengthInvocation,
+  ...queuedInvocations,
+  overflowInvocation
+]).then(([
+  result,
+  hostileResult,
+  throwingToJSONResult,
+  oversizedArrayResult,
+  throwingLengthResult,
+  ...results
+]) => {
   assert.equal(result, "ok");
+  assert.match(hostileResult, /size or complexity limit/);
+  assert.match(throwingToJSONResult, /size or complexity limit/);
+  assert.match(oversizedArrayResult, /size or complexity limit/);
+  assert.match(throwingLengthResult, /size or complexity limit/);
   assert.match(results.at(-1), /Too many pending/);
   console.log("Platform boundary test passed.");
 }).catch((error) => {

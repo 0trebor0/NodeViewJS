@@ -2,13 +2,36 @@
 
 let terminating = false;
 
+function isError(value) {
+  try {
+    return value instanceof Error;
+  } catch {
+    return false;
+  }
+}
+
+function formatFatalValue(value) {
+  if (isError(value)) {
+    try {
+      return value.stack;
+    } catch {
+      return "Unknown fatal error.";
+    }
+  }
+  try {
+    return String(value);
+  } catch {
+    return "Unknown fatal error.";
+  }
+}
+
 function reportFatal(label, value) {
   if (terminating) {
     return;
   }
   terminating = true;
 
-  const details = value instanceof Error ? value.stack : String(value);
+  const details = formatFatalValue(value);
   console.error(`[NodeViewJS dev] ${label}`);
   console.error(details);
   process.exitCode = 1;

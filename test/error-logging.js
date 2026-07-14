@@ -31,10 +31,28 @@ async function main() {
   assert.equal(direct.report("Direct failure", duplicate), true);
   assert.equal(direct.report("Direct failure repeated", duplicate), false);
   assert.equal(direct.report("String failure", "plain failure"), true);
+  assert.equal(direct.report({
+    toString() {
+      throw new Error("context conversion should not escape logger");
+    }
+  }, {
+    toString() {
+      throw new Error("error conversion should not escape logger");
+    }
+  }), true);
+  const throwingStack = new Error("hidden stack failure");
+  Object.defineProperty(throwingStack, "stack", {
+    get() {
+      throw new Error("stack conversion should not escape logger");
+    }
+  });
+  assert.equal(direct.report("Throwing stack failure", throwingStack), true);
   const directContents = fs.readFileSync(directPath, "utf8");
   assert.match(directContents, /Direct failure/);
   assert.match(directContents, /Error: deduplicated failure/);
   assert.match(directContents, /String failure\nplain failure/);
+  assert.match(directContents, /Unknown context\.\nUnknown error\./);
+  assert.match(directContents, /Throwing stack failure\nUnknown error\./);
   assert.equal((directContents.match(/deduplicated failure/g) || []).length, 1);
 
   const rotatingPath = path.join(temporaryRoot, "rotating", "backend.log");
@@ -66,6 +84,32 @@ async function main() {
       ? /deliberate uncaught exception/
       : /deliberate unhandled rejection/);
   }
+
+  const hostileFatal = spawnSync(process.execPath, [
+    "--require",
+    path.join(__dirname, "..", "runtime", "dev-errors.js"),
+    "-e",
+    "const value = { toString() { throw new Error('hidden fatal conversion'); } }; throw value;"
+  ], {
+    encoding: "utf8",
+    timeout: 10_000
+  });
+  assert.notEqual(hostileFatal.status, 0);
+  assert.match(hostileFatal.stderr, /\[NodeViewJS dev\] Backend crashed with an uncaught exception/);
+  assert.match(hostileFatal.stderr, /Unknown fatal error\./);
+
+  const hostileFatalStack = spawnSync(process.execPath, [
+    "--require",
+    path.join(__dirname, "..", "runtime", "dev-errors.js"),
+    "-e",
+    "const value = new Error('hidden stack'); Object.defineProperty(value, 'stack', { get() { throw new Error('hidden stack conversion'); } }); throw value;"
+  ], {
+    encoding: "utf8",
+    timeout: 10_000
+  });
+  assert.notEqual(hostileFatalStack.status, 0);
+  assert.match(hostileFatalStack.stderr, /\[NodeViewJS dev\] Backend crashed with an uncaught exception/);
+  assert.match(hostileFatalStack.stderr, /Unknown fatal error\./);
 
   const commandLog = path.join(temporaryRoot, "command.log");
   const previousLogPath = process.env.NODEVIEW_LOG_PATH;

@@ -10,9 +10,35 @@ const MAX_ENTRY_CHARACTERS = 64 * 1024;
 const installedLoggers = new Set();
 let monitorInstalled = false;
 
+function isError(value) {
+  try {
+    return value instanceof Error;
+  } catch {
+    return false;
+  }
+}
+
 function formatError(value) {
-  if (value instanceof Error) return value.stack || `${value.name}: ${value.message}`;
-  return String(value);
+  if (isError(value)) {
+    try {
+      return value.stack || `${value.name}: ${value.message}`;
+    } catch {
+      return "Unknown error.";
+    }
+  }
+  try {
+    return String(value);
+  } catch {
+    return "Unknown error.";
+  }
+}
+
+function formatContext(value) {
+  try {
+    return String(value).replace(/[\r\n]+/g, " ").slice(0, 256);
+  } catch {
+    return "Unknown context.";
+  }
 }
 
 function appendEntry(logPath, maxBytes, entry) {
@@ -85,11 +111,11 @@ function createErrorLogger(appId, options = {}) {
       installed = false;
     },
     report(context, value) {
-      if (value instanceof Error) {
+      if (isError(value)) {
         if (reportedErrors.has(value)) return false;
         reportedErrors.add(value);
       }
-      const safeContext = String(context).replace(/[\r\n]+/g, " ").slice(0, 256);
+      const safeContext = formatContext(context);
       const details = formatError(value).slice(0, MAX_ENTRY_CHARACTERS);
       const entry = `[${new Date().toISOString()}] [pid ${process.pid}] ${safeContext}\n${details}\n`;
       return appendEntry(logPath, maxBytes, entry);

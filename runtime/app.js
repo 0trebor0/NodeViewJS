@@ -48,9 +48,25 @@ function native() {
   return nativeAddon;
 }
 
+function safeDiagnosticString(value) {
+  try {
+    return String(value);
+  } catch {
+    return "<unprintable>";
+  }
+}
+
+function safeObjectKeys(value) {
+  try {
+    return Object.keys(value);
+  } catch {
+    return undefined;
+  }
+}
+
 function parsePermission(value, { allowGroups, allowScopeWildcard, label }) {
   if (typeof value !== "string") {
-    throw new TypeError(`Unsupported ${label} permission: ${String(value)}`);
+    throw new TypeError(`Unsupported ${label} permission: ${safeDiagnosticString(value)}`);
   }
   if (COMMAND_PERMISSIONS.has(value)) return value;
   if (allowGroups && PERMISSION_GROUPS.has(value)) return value;
@@ -106,6 +122,15 @@ function hasPermission(policy, requirement) {
   return [...policy.allow].some((grant) => permissionMatches(grant, requirement));
 }
 
+function createErrorDetail(error) {
+  try {
+    const message = error instanceof Error ? error.message : String(error);
+    return message.slice(0, 1_024);
+  } catch {
+    return "Unknown IPC command error.";
+  }
+}
+
 function assertPluginMemberName(value, label) {
   if (typeof value !== "string" || !PLUGIN_MEMBER_PATTERN.test(value)) {
     throw new TypeError(`Plugin ${label} must use letters, numbers, dots, underscores, or hyphens.`);
@@ -151,7 +176,7 @@ function resolveCommandRegistration(optionsOrHandler, maybeHandler) {
     if (scope !== undefined) {
       if (!COMMAND_PERMISSIONS.has(parsed) || typeof scope !== "string" ||
           !PERMISSION_SCOPE_PATTERN.test(scope)) {
-        throw new TypeError(`Unsupported command permission scope: ${String(scope)}`);
+        throw new TypeError(`Unsupported command permission scope: ${safeDiagnosticString(scope)}`);
       }
       requirements = [`${parsed}:${scope}`];
     } else {
@@ -173,7 +198,11 @@ function resolvePermissions(options) {
     allow = permissions;
     deny = [];
   } else if (permissions && typeof permissions === "object") {
-    const unknownKeys = Object.keys(permissions).filter(
+    const keys = safeObjectKeys(permissions);
+    if (!keys) {
+      throw new TypeError("App permission policy object could not be inspected.");
+    }
+    const unknownKeys = keys.filter(
       (key) => key !== "allow" && key !== "deny"
     );
     if (unknownKeys.length > 0) {
@@ -1164,7 +1193,7 @@ class App {
       }
       window._post(ipc.serialize(ipc.createResponseMessage(message.id, true, result)));
     } catch (error) {
-      const detail = (error instanceof Error ? error.message : String(error)).slice(0, 1_024);
+      const detail = createErrorDetail(error);
       window._post(ipc.serialize(ipc.createResponseMessage(
         message.id,
         false,

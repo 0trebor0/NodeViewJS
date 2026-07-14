@@ -42,6 +42,7 @@ assert.deepEqual(Object.keys(runtime).sort(), [
 
 const app = new App({ entry: __filename });
 const permittedApp = new App({ entry: __filename, permissions: ["fs:read"] });
+const ipcErrorApp = new App({ entry: __filename });
 const windowOptionsApp = new App({
   entry: __filename,
   center: true,
@@ -75,6 +76,14 @@ const policyApp = new App({
 const secondaryWindow = app.createWindow({ title: "Secondary" });
 
 assert.equal(app.command("plain", () => "ok"), app);
+const hostileCommandError = {
+  toString() {
+    throw new Error("toString should not escape IPC command error handling");
+  }
+};
+assert.equal(ipcErrorApp.command("hostileError", () => {
+  throw hostileCommandError;
+}), ipcErrorApp);
 assert.equal(app.command("readConfig", { permission: "fs:read" }, () => "ok"), app);
 assert.equal(permittedApp.command("readConfig", { permission: "fs:read" }, () => "ok"), permittedApp);
 assert.equal(
@@ -262,8 +271,40 @@ assert.throws(() => normalizeProtocols(["https"]), /Unsupported custom protocol/
 assert.throws(() => normalizeProtocols(["bad scheme"]), /Unsupported custom protocol/);
 assert.throws(() => normalizeProtocols(["my-app", "MY-APP"]), /Duplicate custom protocol/);
 assert.throws(() => normalizeProtocols([{ scheme: "my-app", title: "Wrong" }]), /Unsupported protocol option/);
+assert.throws(
+  () => normalizeProtocols([new Proxy({}, {
+    ownKeys() {
+      throw new Error("protocol options inspection should not escape validation");
+    }
+  })]),
+  /App protocol options object could not be inspected/
+);
+assert.throws(
+  () => normalizeProtocols([{ scheme: {
+    toString() {
+      throw new Error("protocol diagnostic conversion should not escape validation");
+    }
+  } }]),
+  /Unsupported custom protocol scheme: <unprintable>/
+);
 assert.throws(() => normalizeFileAssociations(["txt"]), /Unsupported file association/);
 assert.throws(() => normalizeFileAssociations([".txt", ".TXT"]), /Duplicate file association/);
+assert.throws(
+  () => normalizeFileAssociations([new Proxy({}, {
+    ownKeys() {
+      throw new Error("file association options inspection should not escape validation");
+    }
+  })]),
+  /File association options object could not be inspected/
+);
+assert.throws(
+  () => normalizeFileAssociations([{ extension: {
+    toString() {
+      throw new Error("file association diagnostic conversion should not escape validation");
+    }
+  } }]),
+  /Unsupported file association extension: <unprintable>/
+);
 assert.deepEqual(
   resolveLaunchConfiguration({}, {
     NODEVIEW_PROTOCOLS: '[{"scheme":"env-app","name":"Environment URL"}]',
@@ -362,6 +403,16 @@ assert.throws(
   /Unsupported app permission/
 );
 
+const throwingDiagnosticValue = {
+  toString() {
+    throw new Error("diagnostic conversion should not escape validation");
+  }
+};
+assert.throws(
+  () => new App({ entry: __filename, permissions: [throwingDiagnosticValue] }),
+  /Unsupported app permission: <unprintable>/
+);
+
 assert.throws(
   () => new App({ entry: __filename, permissions: { allow: "fs:read" } }),
   /allow and deny values must be arrays/
@@ -370,6 +421,18 @@ assert.throws(
 assert.throws(
   () => new App({ entry: __filename, permissions: { allow: [], audit: [] } }),
   /Unsupported app permission policy option/
+);
+
+assert.throws(
+  () => new App({
+    entry: __filename,
+    permissions: new Proxy({}, {
+      ownKeys() {
+        throw new Error("permission policy inspection should not escape validation");
+      }
+    })
+  }),
+  /App permission policy object could not be inspected/
 );
 
 assert.throws(
@@ -410,6 +473,15 @@ assert.throws(
 assert.throws(
   () => app.command("wildcardScope", { permission: "fs:read", scope: "*" }, () => "nope"),
   /Unsupported command permission scope/
+);
+
+assert.throws(
+  () => app.command(
+    "hostileScope",
+    { permission: "fs:read", scope: throwingDiagnosticValue },
+    () => "nope"
+  ),
+  /Unsupported command permission scope: <unprintable>/
 );
 
 assert.throws(
@@ -534,7 +606,27 @@ async function testConfig() {
   );
 }
 
-Promise.all([testConfig(), testDevWatcher()])
+async function testIpcCommandErrorDetail() {
+  const postedIpcErrors = [];
+  await ipcErrorApp._handleWindowMessage(
+    { _post(message) { postedIpcErrors.push(JSON.parse(message)); } },
+    runtime.ipc.serialize({
+      version: 1,
+      type: "invoke",
+      id: 77,
+      command: "hostileError"
+    })
+  );
+  assert.deepEqual(postedIpcErrors, [{
+    version: 1,
+    type: "response",
+    id: 77,
+    ok: false,
+    error: "Unknown IPC command error."
+  }]);
+}
+
+Promise.all([testConfig(), testDevWatcher(), testIpcCommandErrorDetail()])
   .then(() => console.log("Runtime API test passed."))
   .catch((error) => {
     console.error(error);

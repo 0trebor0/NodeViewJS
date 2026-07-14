@@ -28,20 +28,54 @@
   const webView2 = window.chrome?.webview;
   const webKit = window.webkit?.messageHandlers?.nodeview;
 
+  function safeIsArray(value) {
+    try {
+      return Array.isArray(value);
+    } catch {
+      return undefined;
+    }
+  }
+
+  function safeGetPrototypeOf(value) {
+    try {
+      return Object.getPrototypeOf(value);
+    } catch {
+      return undefined;
+    }
+  }
+
   function isPlainObject(value) {
-    if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-    const prototype = Object.getPrototypeOf(value);
+    if (!value || typeof value !== "object") return false;
+    const isArray = safeIsArray(value);
+    if (isArray !== false) return false;
+    const prototype = safeGetPrototypeOf(value);
+    if (prototype === undefined) return false;
+    let tag;
+    try {
+      tag = Object.prototype.toString.call(value);
+    } catch {
+      return false;
+    }
     return prototype === null
       || prototype === Object.prototype
-      || (Object.prototype.toString.call(value) === "[object Object]"
-        && Object.getPrototypeOf(prototype) === null);
+      || (tag === "[object Object]"
+        && safeGetPrototypeOf(prototype) === null);
   }
 
   function hasExactKeys(value, required, optional = []) {
     const allowed = new Set([...required, ...optional]);
-    const keys = Object.keys(value);
-    return required.every((key) => Object.prototype.hasOwnProperty.call(value, key))
-      && keys.every((key) => allowed.has(key));
+    let keys;
+    try {
+      keys = Object.keys(value);
+    } catch {
+      return false;
+    }
+    try {
+      return required.every((key) => Object.prototype.hasOwnProperty.call(value, key))
+        && keys.every((key) => allowed.has(key));
+    } catch {
+      return false;
+    }
   }
 
   function isValidName(value) {
@@ -49,6 +83,30 @@
       && value.length > 0
       && value.length <= IPC_MAX_NAME_LENGTH
       && IPC_NAME_PATTERN.test(value);
+  }
+
+  function safeEntries(value) {
+    try {
+      return Object.entries(value);
+    } catch {
+      return undefined;
+    }
+  }
+
+  function safeArrayValues(value) {
+    const values = [];
+    try {
+      const length = value.length;
+      if (!Number.isSafeInteger(length) || length > IPC_MAX_NODES) {
+        return undefined;
+      }
+      for (let index = 0; index < length; index += 1) {
+        values.push(value[index]);
+      }
+    } catch {
+      return undefined;
+    }
+    return values;
   }
 
   function isSafePayload(value) {
@@ -65,12 +123,18 @@
         continue;
       }
       if (type !== "object") return false;
-      if (Array.isArray(current.value)) {
-        for (const child of current.value) stack.push({ value: child, depth: current.depth + 1 });
+      const isArray = safeIsArray(current.value);
+      if (isArray === undefined) return false;
+      if (isArray) {
+        const values = safeArrayValues(current.value);
+        if (!values) return false;
+        for (const child of values) stack.push({ value: child, depth: current.depth + 1 });
         continue;
       }
       if (!isPlainObject(current.value)) return false;
-      for (const [key, child] of Object.entries(current.value)) {
+      const entries = safeEntries(current.value);
+      if (!entries) return false;
+      for (const [key, child] of entries) {
         if (DANGEROUS_KEYS.has(key)) return false;
         stack.push({ value: child, depth: current.depth + 1 });
       }
@@ -103,25 +167,33 @@
   }
 
   function receive(data) {
-    if (!isPlainObject(data) || data.version !== IPC_VERSION || !isSafePayload(data)) return;
+    let eventName;
+    let eventPayload;
+    try {
+      if (!isPlainObject(data) || data.version !== IPC_VERSION || !isSafePayload(data)) return;
 
-    if (data.type === "response") {
-      const valid = data.ok === true
-        ? hasExactKeys(data, ["version", "type", "id", "ok"], ["result"])
-        : data.ok === false
-          && hasExactKeys(data, ["version", "type", "id", "ok", "error"])
-          && typeof data.error === "string";
-      if (!valid || !Number.isSafeInteger(data.id) || data.id <= 0) return;
-      const request = pending.get(data.id);
-      if (!request) return;
-      pending.delete(data.id);
-      clearTimeout(request.timeout);
-      data.ok ? request.resolve(data.result) : request.reject(new Error(data.error));
-    } else if (data.type === "event") {
-      if (!hasExactKeys(data, ["version", "type", "event"], ["payload"])
-          || !isValidName(data.event)) return;
-      dispatch(data.event, data.payload);
+      if (data.type === "response") {
+        const valid = data.ok === true
+          ? hasExactKeys(data, ["version", "type", "id", "ok"], ["result"])
+          : data.ok === false
+            && hasExactKeys(data, ["version", "type", "id", "ok", "error"])
+            && typeof data.error === "string";
+        if (!valid || !Number.isSafeInteger(data.id) || data.id <= 0) return;
+        const request = pending.get(data.id);
+        if (!request) return;
+        pending.delete(data.id);
+        clearTimeout(request.timeout);
+        data.ok ? request.resolve(data.result) : request.reject(new Error(data.error));
+      } else if (data.type === "event") {
+        if (!hasExactKeys(data, ["version", "type", "event"], ["payload"])
+            || !isValidName(data.event)) return;
+        eventName = data.event;
+        eventPayload = data.payload;
+      }
+    } catch {
+      return;
     }
+    if (eventName !== undefined) dispatch(eventName, eventPayload);
   }
 
   const transport = webView2 ? {

@@ -6,6 +6,22 @@ const PROTOCOL_PATTERN = /^[a-z][a-z0-9+.-]{1,31}$/;
 const EXTENSION_PATTERN = /^\.[a-z0-9][a-z0-9-]{0,15}$/;
 const RESERVED_PROTOCOLS = new Set(["file", "http", "https", "mailto"]);
 
+function safeDiagnosticString(value) {
+  try {
+    return String(value);
+  } catch {
+    return "<unprintable>";
+  }
+}
+
+function safeObjectKeys(value) {
+  try {
+    return Object.keys(value);
+  } catch {
+    return undefined;
+  }
+}
+
 function parseArrayEnvironment(name, environment) {
   const value = environment[name];
   if (value === undefined || value === "") return [];
@@ -26,11 +42,13 @@ function normalizeProtocols(value = []) {
     if (!options || typeof options !== "object" || Array.isArray(options)) {
       throw new TypeError("Each app protocol must be a scheme string or options object.");
     }
-    const unknownKey = Object.keys(options).find((key) => !["scheme", "name"].includes(key));
+    const keys = safeObjectKeys(options);
+    if (!keys) throw new TypeError("App protocol options object could not be inspected.");
+    const unknownKey = keys.find((key) => !["scheme", "name"].includes(key));
     if (unknownKey) throw new TypeError(`Unsupported protocol option: ${unknownKey}`);
     const scheme = typeof options.scheme === "string" ? options.scheme.toLowerCase() : "";
     if (!PROTOCOL_PATTERN.test(scheme) || RESERVED_PROTOCOLS.has(scheme)) {
-      throw new TypeError(`Unsupported custom protocol scheme: ${String(options.scheme)}`);
+      throw new TypeError(`Unsupported custom protocol scheme: ${safeDiagnosticString(options.scheme)}`);
     }
     if (seen.has(scheme)) throw new TypeError(`Duplicate custom protocol scheme: ${scheme}`);
     seen.add(scheme);
@@ -50,13 +68,15 @@ function normalizeFileAssociations(value = []) {
     if (!options || typeof options !== "object" || Array.isArray(options)) {
       throw new TypeError("Each file association must be an extension string or options object.");
     }
-    const unknownKey = Object.keys(options).find((key) => !["extension", "name"].includes(key));
+    const keys = safeObjectKeys(options);
+    if (!keys) throw new TypeError("File association options object could not be inspected.");
+    const unknownKey = keys.find((key) => !["extension", "name"].includes(key));
     if (unknownKey) throw new TypeError(`Unsupported file association option: ${unknownKey}`);
     const extension = typeof options.extension === "string"
       ? options.extension.toLowerCase()
       : "";
     if (!EXTENSION_PATTERN.test(extension)) {
-      throw new TypeError(`Unsupported file association extension: ${String(options.extension)}`);
+      throw new TypeError(`Unsupported file association extension: ${safeDiagnosticString(options.extension)}`);
     }
     if (seen.has(extension)) throw new TypeError(`Duplicate file association extension: ${extension}`);
     seen.add(extension);

@@ -11,9 +11,28 @@ const IPC_REQUEST_TIMEOUT_MS = 30_000;
 const IPC_NAME_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._:-]*$/;
 const DANGEROUS_KEYS = new Set(["__proto__", "constructor", "prototype"]);
 
+function safeIsArray(value) {
+  try {
+    return Array.isArray(value);
+  } catch {
+    return undefined;
+  }
+}
+
+function safeGetPrototypeOf(value) {
+  try {
+    return Object.getPrototypeOf(value);
+  } catch {
+    return undefined;
+  }
+}
+
 function isPlainObject(value) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-  const prototype = Object.getPrototypeOf(value);
+  if (!value || typeof value !== "object") return false;
+  const isArray = safeIsArray(value);
+  if (isArray !== false) return false;
+  const prototype = safeGetPrototypeOf(value);
+  if (prototype === undefined) return false;
   return prototype === Object.prototype || prototype === null;
 }
 
@@ -24,11 +43,60 @@ function isValidName(value) {
     && IPC_NAME_PATTERN.test(value);
 }
 
+function safeEntries(value) {
+  try {
+    return Object.entries(value);
+  } catch {
+    return undefined;
+  }
+}
+
+function safeArrayValues(value) {
+  const values = [];
+  try {
+    const length = value.length;
+    if (!Number.isSafeInteger(length) || length > IPC_MAX_NODES) {
+      return undefined;
+    }
+    for (let index = 0; index < length; index += 1) {
+      values.push(value[index]);
+    }
+  } catch {
+    return undefined;
+  }
+  return values;
+}
+
+function safeStringify(value) {
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return undefined;
+  }
+}
+
+function safeString(value) {
+  try {
+    return String(value);
+  } catch {
+    return "Unknown IPC error.";
+  }
+}
+
 function hasExactKeys(value, required, optional = []) {
   const allowed = new Set([...required, ...optional]);
-  const keys = Object.keys(value);
-  return required.every((key) => Object.hasOwn(value, key))
-    && keys.every((key) => allowed.has(key));
+  let keys;
+  try {
+    keys = Object.keys(value);
+  } catch {
+    return false;
+  }
+  try {
+    return required.every((key) => Object.hasOwn(value, key))
+      && keys.every((key) => allowed.has(key));
+  } catch {
+    return false;
+  }
 }
 
 function isSafePayload(value) {
@@ -48,14 +116,20 @@ function isSafePayload(value) {
     }
     if (type !== "object") return false;
 
-    if (Array.isArray(current.value)) {
-      for (const child of current.value) {
+    const isArray = safeIsArray(current.value);
+    if (isArray === undefined) return false;
+    if (isArray) {
+      const values = safeArrayValues(current.value);
+      if (!values) return false;
+      for (const child of values) {
         stack.push({ value: child, depth: current.depth + 1 });
       }
       continue;
     }
     if (!isPlainObject(current.value)) return false;
-    for (const [key, child] of Object.entries(current.value)) {
+    const entries = safeEntries(current.value);
+    if (!entries) return false;
+    for (const [key, child] of entries) {
       if (DANGEROUS_KEYS.has(key)) return false;
       stack.push({ value: child, depth: current.depth + 1 });
     }
@@ -107,7 +181,7 @@ function createResponseMessage(id, ok, resultOrError) {
   if (!Number.isSafeInteger(id) || id <= 0) throw new TypeError("IPC response id is invalid.");
   if (typeof ok !== "boolean") throw new TypeError("IPC response status is invalid.");
   if (!ok) {
-    return { version: IPC_VERSION, type: "response", id, ok, error: String(resultOrError) };
+    return { version: IPC_VERSION, type: "response", id, ok, error: safeString(resultOrError) };
   }
   const message = { version: IPC_VERSION, type: "response", id, ok };
   if (resultOrError !== undefined) message.result = resultOrError;
@@ -116,7 +190,7 @@ function createResponseMessage(id, ok, resultOrError) {
 
 function serialize(message) {
   if (!isSafePayload(message)) throw new TypeError("IPC message contains an unsupported payload.");
-  const serialized = JSON.stringify(message);
+  const serialized = safeStringify(message);
   if (serialized === undefined || Buffer.byteLength(serialized, "utf8") > IPC_MAX_SERIALIZED_BYTES) {
     throw new RangeError("IPC message exceeds the serialized size limit.");
   }
