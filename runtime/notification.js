@@ -2,6 +2,8 @@
 
 let nativeAddon;
 
+const CONTROL_CHARACTER_PATTERN = /[\u0000-\u001F\u007F]/;
+
 function native() {
   nativeAddon ??= require("./native");
   return nativeAddon;
@@ -15,10 +17,12 @@ function normalizeNotificationOptions(options = {}) {
     throw new TypeError("Notification message must be a string.");
   }
   const title = options.title ?? "NodeViewJS";
-  if (typeof title !== "string" || title.trim().length === 0 || title.length > 63) {
+  if (typeof title !== "string" || title.trim().length === 0 || title.length > 63 ||
+      CONTROL_CHARACTER_PATTERN.test(title)) {
     throw new TypeError("Notification title must be a non-empty string of at most 63 characters.");
   }
-  if (options.message.trim().length === 0 || options.message.length > 255) {
+  if (options.message.trim().length === 0 || options.message.length > 255 ||
+      CONTROL_CHARACTER_PATTERN.test(options.message)) {
     throw new TypeError("Notification message must be a non-empty string of at most 255 characters.");
   }
   return Object.freeze({ title, message: options.message });

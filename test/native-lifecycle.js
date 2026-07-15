@@ -32,9 +32,53 @@ if (process.platform === "win32") {
     /supports only http, https, and mailto/
   );
   assert.throws(
+    () => native.openExternal(" https://example.com"),
+    /must not contain leading, trailing, or control whitespace/
+  );
+  assert.throws(
+    () => native.openExternal("https://example.com/\r\nnext"),
+    /must not contain leading, trailing, or control whitespace/
+  );
+  assert.throws(
     () => native.openPath(path.join(os.tmpdir(), "nodeviewjs-native-missing-path")),
     /target does not exist/
   );
+  assert.throws(
+    () => native.openPath(`${__filename}\0hidden`),
+    /must not contain control characters/
+  );
+
+  const recoveryDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "nodeviewjs-native-recovery-"));
+  const recoveryResult = path.join(recoveryDirectory, "result.txt");
+  try {
+    const recovery = spawnSync(
+      process.execPath,
+      [path.join(__dirname, "fixtures", "recover-after-icon-failure.js")],
+      {
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          LOCALAPPDATA: path.join(recoveryDirectory, "local-app-data"),
+          NODEVIEW_RECOVERY_RESULT: recoveryResult
+        },
+        timeout: 10_000
+      }
+    );
+    assert.equal(recovery.error, undefined, recovery.error?.message);
+    assert.equal(recovery.status, 0, recovery.stderr);
+    assert.equal(fs.readFileSync(recoveryResult, "utf8"), "recovered");
+  } finally {
+    try {
+      fs.rmSync(recoveryDirectory, {
+        recursive: true,
+        force: true,
+        maxRetries: 2,
+        retryDelay: 100
+      });
+    } catch (error) {
+      if (!["EBUSY", "ENOTEMPTY", "EPERM"].includes(error?.code)) throw error;
+    }
+  }
 
   const controlsWindow = native.createWindow({
     title: "NodeViewJS Window Controls Test",

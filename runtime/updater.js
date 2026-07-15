@@ -14,6 +14,7 @@ const MANIFEST_MAX_BYTES = 64 * 1024;
 const DEFAULT_MAX_DOWNLOAD_BYTES = 512 * 1024 * 1024;
 const VERSION_PATTERN = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
 const SHA256_PATTERN = /^[a-f0-9]{64}$/;
+const CONTROL_CHARACTER_PATTERN = /[\u0000-\u001F\u007F]/;
 const MANIFEST_KEYS = new Set([
   "schemaVersion",
   "appId",
@@ -74,6 +75,9 @@ function compareVersions(left, right) {
 }
 
 function requireHttpsUrl(value, label) {
+  if (typeof value !== "string" || value.trim() !== value || CONTROL_CHARACTER_PATTERN.test(value)) {
+    throw new TypeError(`${label} must be a valid HTTPS URL.`);
+  }
   let url;
   try {
     url = new URL(value);

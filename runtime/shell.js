@@ -4,6 +4,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const EXTERNAL_PROTOCOLS = new Set(["http:", "https:", "mailto:"]);
+const CONTROL_CHARACTER_PATTERN = /[\u0000-\u001F\u007F]/;
 
 let nativeAddon;
 
@@ -18,6 +19,9 @@ function native() {
 function openExternal(value) {
   if (typeof value !== "string" || value.length === 0) {
     throw new TypeError("External URL must be a non-empty string.");
+  }
+  if (value.trim() !== value || CONTROL_CHARACTER_PATTERN.test(value)) {
+    throw new TypeError("External URL must not contain leading, trailing, or control whitespace.");
   }
 
   let url;
@@ -39,6 +43,9 @@ function openExternal(value) {
 function openPath(value) {
   if (typeof value !== "string" || value.length === 0) {
     throw new TypeError("Shell path must be a non-empty string.");
+  }
+  if (CONTROL_CHARACTER_PATTERN.test(value)) {
+    throw new TypeError("Shell path must not contain control characters.");
   }
   const resolved = path.resolve(value);
   if (!fs.existsSync(resolved)) {

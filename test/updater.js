@@ -148,6 +148,20 @@ async function main() {
     manifestUrl: "http://updates.example.com/update.json",
     publicKey: publicKeyPem
   }), /HTTPS URL/);
+  assert.throws(() => new Updater({
+    appId: "com.example.app",
+    currentVersion: "1.0.0",
+    manifestUrl: " https://updates.example.com/update.json",
+    publicKey: publicKeyPem
+  }), /HTTPS URL/);
+  assert.throws(() => validateManifest(
+    signedManifest(privateKey, installer, { url: "https://updates.example.com/app.exe\nnext" }),
+    {
+      appId: "com.example.app",
+      maxDownloadBytes: 1024,
+      publicKey
+    }
+  ), /HTTPS URL/);
 
   const generatorRoot = await fsPromises.mkdtemp(path.join(os.tmpdir(), "nodeviewjs-manifest-"));
   const generatorInstaller = path.join(generatorRoot, "setup.exe");
@@ -177,6 +191,18 @@ async function main() {
     maxDownloadBytes: 1024,
     publicKey
   }).version, "1.2.0");
+  const rejectedGenerated = spawnSync(process.execPath, [
+    path.join(__dirname, "..", "scripts", "generate-update-manifest.js"),
+    "--project-root", generatorRoot,
+    "--installer", generatorInstaller,
+    "--output", path.join(generatorRoot, "rejected-update.json"),
+    "--url", " https://updates.example.com/setup.exe"
+  ], {
+    encoding: "utf8",
+    env: { ...process.env, NODEVIEW_UPDATE_PRIVATE_KEY: privateKeyPath }
+  });
+  assert.notEqual(rejectedGenerated.status, 0);
+  assert.match(rejectedGenerated.stderr, /Update installer URL must use HTTPS/);
 
   console.log("Updater test passed.");
 }

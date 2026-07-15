@@ -5,6 +5,7 @@ const path = require("node:path");
 const PROTOCOL_PATTERN = /^[a-z][a-z0-9+.-]{1,31}$/;
 const EXTENSION_PATTERN = /^\.[a-z0-9][a-z0-9-]{0,15}$/;
 const RESERVED_PROTOCOLS = new Set(["file", "http", "https", "mailto"]);
+const CONTROL_CHARACTER_PATTERN = /[\u0000-\u001F\u007F]/;
 
 function safeDiagnosticString(value) {
   try {
@@ -53,7 +54,8 @@ function normalizeProtocols(value = []) {
     if (seen.has(scheme)) throw new TypeError(`Duplicate custom protocol scheme: ${scheme}`);
     seen.add(scheme);
     const name = options.name ?? `${scheme} URL`;
-    if (typeof name !== "string" || name.trim().length === 0 || name.length > 100) {
+    if (typeof name !== "string" || name.trim().length === 0 || name.length > 100 ||
+        CONTROL_CHARACTER_PATTERN.test(name)) {
       throw new TypeError(`Protocol '${scheme}' name must be between 1 and 100 characters.`);
     }
     return Object.freeze({ scheme, name: name.trim() });
@@ -81,7 +83,8 @@ function normalizeFileAssociations(value = []) {
     if (seen.has(extension)) throw new TypeError(`Duplicate file association extension: ${extension}`);
     seen.add(extension);
     const name = options.name ?? `${extension.slice(1).toUpperCase()} file`;
-    if (typeof name !== "string" || name.trim().length === 0 || name.length > 100) {
+    if (typeof name !== "string" || name.trim().length === 0 || name.length > 100 ||
+        CONTROL_CHARACTER_PATTERN.test(name)) {
       throw new TypeError(`File association '${extension}' name must be between 1 and 100 characters.`);
     }
     return Object.freeze({ extension, name: name.trim() });
@@ -103,8 +106,14 @@ function findLaunchTargets(args, cwd, configuration) {
   if (!Array.isArray(args) || !args.every((value) => typeof value === "string")) {
     throw new TypeError("Launch arguments must be an array of strings.");
   }
+  if (args.some((value) => value.trim() !== value || CONTROL_CHARACTER_PATTERN.test(value))) {
+    throw new TypeError("Launch arguments must not contain leading, trailing, or control whitespace.");
+  }
   if (typeof cwd !== "string" || cwd.length === 0) {
     throw new TypeError("Launch working directory must be a non-empty string.");
+  }
+  if (CONTROL_CHARACTER_PATTERN.test(cwd)) {
+    throw new TypeError("Launch working directory must not contain control characters.");
   }
   const protocols = new Set(configuration.protocols.map(({ scheme }) => `${scheme}:`));
   const extensions = new Set(configuration.fileAssociations.map(({ extension }) => extension));

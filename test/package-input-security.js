@@ -60,8 +60,12 @@ try {
   for (const [config, message] of [
     [{ include: ["../outside"] }, /path traversal/],
     [{ include: [outside] }, /inside the project/],
+    [{ include: ["assets/safe.txt\0hidden"] }, /must not contain control characters/],
     [{ entry: "../outside/outside.txt" }, /path traversal/],
+    [{ entry: "app.js\nhidden" }, /must not contain control characters/],
     [{ exclude: ["../*"] }, /path traversal/],
+    [{ exclude: ["assets\rprivate"] }, /must not contain control characters/],
+    [{ icon: "assets/app.ico\0hidden" }, /must not contain control characters/],
     [{ name: "../escape" }, /unsafe/],
     [{ name: "CON" }, /unsafe/]
   ]) {

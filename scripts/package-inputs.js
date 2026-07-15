@@ -25,10 +25,14 @@ const SECRET_PATTERNS = Object.freeze([
   ["live API key", /\b(?:sk|rk)_live_[A-Za-z0-9]{16,}\b/],
   ["credential assignment", /\b(?:api[_-]?key|client[_-]?secret|password|secret|token)\b\s*[:=]\s*["'][^"'\r\n]{8,}["']/i]
 ]);
+const CONTROL_CHARACTER_PATTERN = /[\u0000-\u001F\u007F]/;
 
 function normalizeRelative(value, label) {
   if (typeof value !== "string" || value.trim().length === 0) {
     throw new TypeError(`${label} must be a non-empty relative path.`);
+  }
+  if (CONTROL_CHARACTER_PATTERN.test(value)) {
+    throw new Error(`${label} must not contain control characters.`);
   }
   if (path.isAbsolute(value)) throw new Error(`${label} must stay inside the project directory.`);
   const segments = value.replace(/\\/g, "/").split("/");

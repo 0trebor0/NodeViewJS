@@ -3,11 +3,17 @@
 const os = require("node:os");
 const path = require("node:path");
 
+const CONTROL_CHARACTER_PATTERN = /[\u0000-\u001F\u007F]/;
+
 function resolveAppId(value) {
   if (typeof value !== "string" || value.trim().length === 0) {
     throw new TypeError("App id must be a non-empty string.");
   }
-  return value.trim().normalize("NFKC");
+  const resolved = value.trim().normalize("NFKC");
+  if (CONTROL_CHARACTER_PATTERN.test(resolved)) {
+    throw new TypeError("App id must not contain control characters.");
+  }
+  return resolved;
 }
 
 function hashAppId(appId) {

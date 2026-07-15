@@ -4,6 +4,8 @@ const fs = require("node:fs/promises");
 const os = require("node:os");
 const path = require("node:path");
 
+const CONTROL_CHARACTER_PATTERN = /[\u0000-\u001F\u007F]/;
+
 function resolveConfigDirectory(options = {}) {
   if (!options || typeof options !== "object" || Array.isArray(options)) {
     throw new TypeError("Config options must be an object.");
@@ -13,12 +15,18 @@ function resolveConfigDirectory(options = {}) {
     if (typeof options.directory !== "string" || options.directory.length === 0) {
       throw new TypeError("Config directory must be a non-empty string.");
     }
+    if (CONTROL_CHARACTER_PATTERN.test(options.directory)) {
+      throw new TypeError("Config directory must not contain control characters.");
+    }
     return path.resolve(options.directory);
   }
 
   const appName = options.appName ?? "NodeViewJS";
   if (typeof appName !== "string" || appName.length === 0) {
     throw new TypeError("Config appName must be a non-empty string.");
+  }
+  if (CONTROL_CHARACTER_PATTERN.test(appName)) {
+    throw new TypeError("Config appName must not contain control characters.");
   }
 
   const baseDirectory = process.env.APPDATA || path.join(os.homedir(), ".config");
@@ -29,6 +37,9 @@ function resolveConfigPath(options = {}) {
   const fileName = options.fileName ?? "config.json";
   if (typeof fileName !== "string" || fileName.length === 0) {
     throw new TypeError("Config fileName must be a non-empty string.");
+  }
+  if (CONTROL_CHARACTER_PATTERN.test(fileName)) {
+    throw new TypeError("Config fileName must not contain control characters.");
   }
   if (fileName !== path.basename(fileName)) {
     throw new TypeError("Config fileName must not include directories.");

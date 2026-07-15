@@ -15,6 +15,7 @@ const {
   PERMISSION_GROUPS
 } = require("../runtime/app");
 const {
+  resolveAppId,
   resolveAppUserModelId,
   resolveLogPath,
   resolveUpdateDirectory,
@@ -105,6 +106,8 @@ assert.ok(COMMAND_PERMISSIONS.has("clipboard:write"));
 assert.ok(PERMISSION_GROUPS.has("fs:*"));
 assert.ok(PERMISSION_GROUPS.has("dialog:*"));
 assert.ok(PERMISSION_GROUPS.has("clipboard:*"));
+assert.equal(resolveAppId("  My App  "), "My App");
+assert.throws(() => resolveAppId("My\nApp"), /must not contain control characters/);
 assert.match(resolveAppUserModelId("My App"), /^NodeViewJS\.My\.App\.[0-9a-f]{16}$/);
 assert.equal(resolveAppUserModelId("My App"), resolveAppUserModelId("My App"));
 assert.notEqual(resolveAppUserModelId("My App"), resolveAppUserModelId("My-App"));
@@ -128,8 +131,20 @@ assert.throws(
   /must not contain credentials/
 );
 assert.throws(
+  () => shell.openExternal(" https://example.com"),
+  /must not contain leading, trailing, or control whitespace/
+);
+assert.throws(
+  () => shell.openExternal("https://example.com/\nnext"),
+  /must not contain leading, trailing, or control whitespace/
+);
+assert.throws(
   () => shell.openPath(path.join(os.tmpdir(), "nodeviewjs-missing-shell-path")),
   /does not exist/
+);
+assert.throws(
+  () => shell.openPath(`${__filename}\0hidden`),
+  /must not contain control characters/
 );
 
 if (process.platform === "win32") {
@@ -272,6 +287,10 @@ assert.throws(() => normalizeProtocols(["bad scheme"]), /Unsupported custom prot
 assert.throws(() => normalizeProtocols(["my-app", "MY-APP"]), /Duplicate custom protocol/);
 assert.throws(() => normalizeProtocols([{ scheme: "my-app", title: "Wrong" }]), /Unsupported protocol option/);
 assert.throws(
+  () => normalizeProtocols([{ scheme: "my-app", name: "My\nApp URL" }]),
+  /name must be between 1 and 100 characters/
+);
+assert.throws(
   () => normalizeProtocols([new Proxy({}, {
     ownKeys() {
       throw new Error("protocol options inspection should not escape validation");
@@ -289,6 +308,10 @@ assert.throws(
 );
 assert.throws(() => normalizeFileAssociations(["txt"]), /Unsupported file association/);
 assert.throws(() => normalizeFileAssociations([".txt", ".TXT"]), /Duplicate file association/);
+assert.throws(
+  () => normalizeFileAssociations([{ extension: ".txt", name: "Text\rFile" }]),
+  /name must be between 1 and 100 characters/
+);
 assert.throws(
   () => normalizeFileAssociations([new Proxy({}, {
     ownKeys() {
@@ -331,6 +354,20 @@ assert.deepEqual(
       value: path.resolve(os.tmpdir(), "launch-root", "relative.note")
     }
   ]
+);
+assert.throws(
+  () => findLaunchTargets([" my-app://open/item"], path.join(os.tmpdir(), "launch-root"), {
+    protocols: [{ scheme: "my-app" }],
+    fileAssociations: []
+  }),
+  /Launch arguments must not contain leading, trailing, or control whitespace/
+);
+assert.throws(
+  () => findLaunchTargets(["relative.note"], `${path.join(os.tmpdir(), "launch-root")}\0hidden`, {
+    protocols: [],
+    fileAssociations: [{ extension: ".note" }]
+  }),
+  /Launch working directory must not contain control characters/
 );
 const currentWebViewDirectory = process.platform === "darwin"
   ? "WebKit"
@@ -603,6 +640,21 @@ async function testConfig() {
   assert.throws(
     () => config.resolveConfigPath({ directory, fileName: "settings.txt" }),
     /must end with .json/
+  );
+
+  assert.throws(
+    () => config.resolveConfigPath({ directory: `${directory}\0hidden`, fileName: "settings.json" }),
+    /directory must not contain control characters/
+  );
+
+  assert.throws(
+    () => config.resolveConfigPath({ appName: "My\nApp", fileName: "settings.json" }),
+    /appName must not contain control characters/
+  );
+
+  assert.throws(
+    () => config.resolveConfigPath({ directory, fileName: "settings.json\0hidden" }),
+    /fileName must not contain control characters/
   );
 }
 

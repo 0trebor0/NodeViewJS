@@ -6,6 +6,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const { MANIFEST_SCHEMA_VERSION, canonicalizeManifest } = require("../runtime/updater");
+const CONTROL_CHARACTER_PATTERN = /[\u0000-\u001F\u007F]/;
 
 function option(name) {
   const index = process.argv.indexOf(name);
@@ -30,6 +31,9 @@ const requestedUrl = option("--url");
 
 if (!requestedUrl) {
   throw new Error("Update manifest generation requires --url <https-installer-url>.");
+}
+if (requestedUrl.trim() !== requestedUrl || CONTROL_CHARACTER_PATTERN.test(requestedUrl)) {
+  throw new Error("Update installer URL must use HTTPS without embedded credentials.");
 }
 const installerUrl = new URL(requestedUrl);
 if (installerUrl.protocol !== "https:" || installerUrl.username || installerUrl.password) {

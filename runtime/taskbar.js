@@ -5,6 +5,7 @@ const path = require("node:path");
 
 const PROGRESS_STATES = new Set(["normal", "paused", "error", "indeterminate"]);
 const ATTENTION_TYPES = new Set(["informational", "critical", "stop"]);
+const CONTROL_CHARACTER_PATTERN = /[\u0000-\u001F\u007F]/;
 
 function normalizeProgress(value, state = "normal") {
   if (value === null) return Object.freeze({ value: 0, state: "none" });
@@ -18,7 +19,8 @@ function normalizeProgress(value, state = "normal") {
 }
 
 function normalizeOverlay(icon, description = "") {
-  if (typeof description !== "string" || description.length > 100) {
+  if (typeof description !== "string" || description.length > 100 ||
+      CONTROL_CHARACTER_PATTERN.test(description)) {
     throw new TypeError("Taskbar overlay description must be a string of at most 100 characters.");
   }
   if (icon === null) return Object.freeze({ icon: null, description: "" });

@@ -31,6 +31,7 @@ try {
   assert.throws(() => normalizeOverlay(path.join(temporaryDirectory, "overlay.png")), /\.ico format/);
   assert.throws(() => normalizeOverlay(path.join(temporaryDirectory, "missing.ico")), /not found/);
   assert.throws(() => normalizeOverlay(icon, "x".repeat(101)), /at most 100/);
+  assert.throws(() => normalizeOverlay(icon, "Ready\nhidden"), /at most 100/);
 } finally {
   fs.rmSync(temporaryDirectory, { recursive: true, force: true });
 }
