@@ -306,7 +306,7 @@ function resolveWindowOptions(options, fallback = {}, owner = "Window") {
     closeToHide: options.closeToHide ?? fallback.closeToHide ?? false,
     transparent: options.transparent ?? fallback.transparent ?? false,
     windowColors: normalizeWindowColors(options.windowColors, fallback.windowColors),
-    devtools: options.devtools ?? fallback.devtools ?? false,
+    devtools: options.devtools ?? fallback.devtools ?? process.env.NODEVIEW_DEVTOOLS === "1",
     startupTiming: options.startupTiming ?? fallback.startupTiming ?? process.env.NODEVIEW_STARTUP_TIMING === "1",
     singleInstance,
     menu,

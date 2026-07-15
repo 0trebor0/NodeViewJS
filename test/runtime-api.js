@@ -42,6 +42,12 @@ assert.deepEqual(Object.keys(runtime).sort(), [
 ]);
 
 const app = new App({ entry: __filename });
+const previousDevTools = process.env.NODEVIEW_DEVTOOLS;
+process.env.NODEVIEW_DEVTOOLS = "1";
+const devToolsEnvironmentApp = new App({ entry: __filename });
+const explicitlyDisabledDevToolsApp = new App({ entry: __filename, devtools: false });
+if (previousDevTools === undefined) delete process.env.NODEVIEW_DEVTOOLS;
+else process.env.NODEVIEW_DEVTOOLS = previousDevTools;
 const permittedApp = new App({ entry: __filename, permissions: ["fs:read"] });
 const ipcErrorApp = new App({ entry: __filename });
 const windowOptionsApp = new App({
@@ -76,6 +82,8 @@ const policyApp = new App({
 });
 const secondaryWindow = app.createWindow({ title: "Secondary" });
 
+assert.equal(devToolsEnvironmentApp.options.devtools, true);
+assert.equal(explicitlyDisabledDevToolsApp.options.devtools, false);
 assert.equal(app.command("plain", () => "ok"), app);
 const hostileCommandError = {
   toString() {

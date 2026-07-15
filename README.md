@@ -222,8 +222,9 @@ const app = new App({
   entry: path.join(__dirname, "index.html")
 });
 
-app.command("greet", async (name) => {
-  return `Hello ${name || "there"} from NodeViewJS`;
+app.command("greet", async ({ name }) => {
+  console.log("Greeting:", name);
+  return { message: `Hello ${name || "there"} from NodeViewJS` };
 });
 
 app.run();
@@ -617,12 +618,24 @@ Frontend:
   const output = document.querySelector("#output");
 
   greetButton.onclick = async () => {
-    output.textContent = await NodeViewJS.invoke("greet", nameInput.value);
+    try {
+      const result = await NodeViewJS.invoke("greet", {
+        name: nameInput.value
+      });
+      output.textContent = result.message;
+    } catch (error) {
+      console.error("Could not greet:", error);
+      output.textContent = error.message;
+    }
   };
 </script>
 ```
 
 The frontend does not need to include a bridge script. NodeViewJS provides `window.NodeViewJS` automatically.
+
+`NodeViewJS.invoke()` returns a promise for the value returned by the backend command. An `async` command that does not explicitly return a value resolves to `undefined`. If the command throws or rejects, `invoke()` rejects with that error. Payloads and return values must be JSON-safe values within the IPC limits described in the security section.
+
+Backend `console.log()` output appears in the terminal or backend log. Frontend `console.log()` output appears in WebView DevTools. Run `npm run dev` to use DevTools; packaged Windows apps intentionally disable them even when `devtools: true` is present in application options.
 
 `window.NodeView` is retained as a compatibility alias. New applications should use `window.NodeViewJS`.
 
@@ -1170,6 +1183,33 @@ app.command("clipboard:write", {
 The helper is trusted backend code and is not exposed directly to the WebView. Frontend access should use registered commands with `clipboard:read` or `clipboard:write`; an app policy can grant both using `clipboard:*`.
 
 ### Events
+
+Events are delivered only to listeners that already exist; they are not queued for a page that has not loaded yet. Do not call `app.emit()` before `app.run()` and expect the first page to receive it. For initial backend-to-frontend data, register the frontend listener first and use a readiness handshake.
+
+Backend readiness handshake:
+
+```js
+app.on("frontend-ready", () => {
+  app.emit("theme-changed", { theme: "dark" });
+});
+
+app.run();
+```
+
+Frontend readiness handshake:
+
+```js
+window.addEventListener("load", () => {
+  NodeViewJS.on("theme-changed", ({ theme }) => {
+    document.documentElement.dataset.theme = theme;
+  });
+
+  // Emit readiness only after all initial listeners are registered.
+  NodeViewJS.emit("frontend-ready");
+});
+```
+
+`NodeViewJS.on()` and `NodeViewJS.once()` register listeners synchronously and return unsubscribe functions; do not `await` them.
 
 Backend:
 
