@@ -65,11 +65,18 @@ bool DecodeUtf8Path(const std::string& encoded, std::wstring* output) {
   return true;
 }
 
+bool IsUnsafePathCharacter(wchar_t character) {
+  return (character >= 0 && character <= 0x1F) || character == 0x7F ||
+      (character >= 0x202A && character <= 0x202E) ||
+      (character >= 0x2066 && character <= 0x2069);
+}
+
 bool IsSafeRelativePath(const std::wstring& path) {
   if (path.empty() || path.front() == L'/' || path.back() == L'/' ||
       path.find(L'\\') != std::wstring::npos || path.find(L':') != std::wstring::npos) {
     return false;
   }
+  if (std::any_of(path.begin(), path.end(), IsUnsafePathCharacter)) return false;
   size_t start = 0;
   while (start < path.size()) {
     const size_t end = path.find(L'/', start);

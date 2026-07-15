@@ -8,6 +8,7 @@ const path = require("node:path");
 const MANIFEST_NAME = "integrity.manifest";
 const MANIFEST_HEADER = "NODEVIEWJS-INTEGRITY 1 SHA256";
 const SHA256_PATTERN = /^[a-f0-9]{64}$/;
+const UNSAFE_PATH_CHARACTER_PATTERN = /[\u0000-\u001F\u007F\u202A-\u202E\u2066-\u2069]/u;
 
 function sha256File(file) {
   const hash = crypto.createHash("sha256");
@@ -91,6 +92,7 @@ function parseIntegrityManifest(manifest) {
     }
     const normalized = relative.split("/");
     if (!relative || path.isAbsolute(relative) || relative.includes("\\")
+        || UNSAFE_PATH_CHARACTER_PATTERN.test(relative)
         || normalized.some((part) => !part || part === "." || part === "..")) {
       throw new Error("Integrity manifest path is unsafe.");
     }

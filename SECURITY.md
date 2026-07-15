@@ -49,7 +49,7 @@ Packaged local HTML, CSS, and JavaScript are application code, but they remain u
 - Packaged builds reference a copied local bridge script from prepared HTML and direct native hosts to skip development bridge injection.
 - Windows packaging accepts only canonical project-contained inputs and destinations, rejects links/reparse points and traversal, excludes common secret-bearing files, and emits redacted optional credential-pattern warnings.
 - Windows packages bind a deterministic manifest for every `resources` file into the launcher. The launcher rejects modified manifests, paths, links, missing/extra files, size changes, or SHA-256 mismatches before starting Node.
-- Windows release builds enable SDL checks, Spectre mitigation, Control Flow Guard, ASLR, DEP, and CET compatibility for the addon and launcher. CI verifies the resulting PE headers and also runs production dependency auditing, warning-as-error MSVC analysis, malformed-input corpora, package tamper checks, and installer smoke through `npm run security:gate`.
+- Windows release builds enable SDL checks, Spectre mitigation, Control Flow Guard, ASLR, DEP, and CET compatibility for the addon and launcher. CI verifies the resulting PE headers and also runs repository and package-surface secret and hidden-character scanning before and after generated native build files exist, production dependency auditing, warning-as-error MSVC analysis, malformed-input corpora, package tamper checks, and installer smoke through `npm run security:gate`.
 
 ## Known limitations and non-goals
 
@@ -85,7 +85,7 @@ These limitations are tracked in the Security-First Queue in `PLAN.md`. They sho
 | Update channel | Manifest, installer, downgrade, or staged file is tampered with | Ed25519, HTTPS, application/version binding, size and SHA-256 checks, transactional replacement | `test/updater.js`, `test/installer-smoke.ps1` |
 | Single-instance channel | Another process floods or forges launch data | Per-app local endpoint, bounded payload, validation | `test/single-instance.js`, `test/app-single-instance.js` |
 | Native lifetime | Late callback or stale window accesses destroyed state | Instance ownership and initialization generation checks | `test/native-lifecycle.js`, `test/multi-window-integration.js` |
-| Release pipeline | Vulnerable dependency, compiler-hardening regression, malformed input, or tampered package ships | Windows `security:gate` with production audit, warning-as-error MSVC analysis, hardened PE builds, corpora, tamper tests, and installer smoke | `test/security-corpus.js`, `test/package-integrity.js`, `test/installer-smoke.ps1`, `SECURITY-CHECKLIST.md`; macOS/Linux parity deferred |
+| Release pipeline | Secret, hidden source character, vulnerable dependency, compiler-hardening regression, malformed input, or tampered package ships | Windows `security:gate` with repository and package-surface scanning, production audit, warning-as-error MSVC analysis, hardened PE builds, corpora, tamper tests, and installer smoke | `scripts/security-scan.js`, `test/security-corpus.js`, `test/package-integrity.js`, `test/installer-smoke.ps1`, `SECURITY-CHECKLIST.md`; macOS/Linux parity deferred |
 
 ## Rules for application developers
 

@@ -1390,13 +1390,13 @@ Full unit, packaging, and CLI regression suite:
 npm test
 ```
 
-Repository secret scan, Windows dependency audit, warning-as-error native analysis, PE hardening, adversarial package checks, and installer smoke:
+Repository/package-surface secret and hidden-character scan, Windows dependency audit, warning-as-error native analysis, PE hardening, adversarial package checks, and installer smoke:
 
 ```powershell
 npm run security:gate
 ```
 
-To run only the tracked-file secret scanner:
+To run only the repository/package-surface scanner:
 
 ```powershell
 npm run security:repo

@@ -22,6 +22,7 @@ const SECRET_PATTERNS = Object.freeze([
   ["private key", /-----BEGIN [A-Z ]*PRIVATE KEY-----/],
   ["AWS access key", /\bAKIA[0-9A-Z]{16}\b/],
   ["GitHub token", /\bgh[pousr]_[A-Za-z0-9_]{20,}\b/],
+  ["npm token", /\bnpm_[A-Za-z0-9]{36,}\b/],
   ["live API key", /\b(?:sk|rk)_live_[A-Za-z0-9]{16,}\b/],
   ["credential assignment", /\b(?:api[_-]?key|client[_-]?secret|password|secret|token)\b\s*[:=]\s*["'][^"'\r\n]{8,}["']/i]
 ]);

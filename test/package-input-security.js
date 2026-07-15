@@ -16,6 +16,7 @@ const project = path.join(temporaryRoot, "project");
 const outside = path.join(temporaryRoot, "outside");
 fs.mkdirSync(path.join(project, "assets"), { recursive: true });
 fs.mkdirSync(outside, { recursive: true });
+const fakeNpmToken = `npm_${"abcdefghijklmnopqrstuvwxyz1234567890"}`;
 
 function writePackage(nodeviewjs = {}) {
   fs.writeFileSync(path.join(project, "package.json"), JSON.stringify({
@@ -35,6 +36,7 @@ try {
   fs.writeFileSync(path.join(project, "app.js"), "require('nodeviewjs');");
   fs.writeFileSync(path.join(project, "index.html"), "<!doctype html><title>Security test</title>");
   fs.writeFileSync(path.join(project, "assets", "safe.txt"), "safe");
+  fs.writeFileSync(path.join(project, "npm-token.txt"), fakeNpmToken);
   fs.writeFileSync(path.join(project, "config.js"), 'const apiKey = "not-a-real-secret-value";');
   fs.writeFileSync(path.join(project, ".env"), "TOKEN=must-not-package");
   fs.writeFileSync(path.join(project, "bundle.js.map"), "{}");
@@ -50,7 +52,13 @@ try {
   assert.ok(!relativeFiles.includes(".env"));
   assert.ok(!relativeFiles.includes("bundle.js.map"));
   assert.ok(!relativeFiles.includes("private.pem"));
-  assert.deepEqual(collected.warnings, [{ file: "config.js", pattern: "credential assignment" }]);
+  assert.deepEqual(
+    collected.warnings.sort((left, right) => left.file.localeCompare(right.file)),
+    [
+      { file: "config.js", pattern: "credential assignment" },
+      { file: "npm-token.txt", pattern: "npm token" }
+    ]
+  );
 
   const destination = path.join(project, "build", "portable", "PackageSecurityTest", "resources", "app");
   copyPackageInputs(project, destination);
@@ -116,7 +124,9 @@ try {
     assert.equal(packaged.error, undefined, packaged.error?.message);
     assert.equal(packaged.status, 0, packaged.stderr);
     assert.match(packaged.stderr, /possible credential assignment/);
+    assert.match(packaged.stderr, /possible npm token/);
     assert.doesNotMatch(packaged.stderr, /not-a-real-secret-value/);
+    assert.equal(packaged.stderr.includes(fakeNpmToken), false);
     const packagedApp = path.join(
       project,
       "build", "portable", "PackageSecurityTest", "resources", "app"
