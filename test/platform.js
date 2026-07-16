@@ -280,8 +280,14 @@ window.top = window;
 const bridgeSource = fs.readFileSync(path.join(root, "runtime", "bridge.js"), "utf8");
 vm.runInNewContext(
   bridgeSource,
-  { window, setTimeout, clearTimeout }
+  { document: { readyState: "loading" }, window, setTimeout, clearTimeout }
 );
+assert.deepEqual(JSON.parse(JSON.stringify(posted)), [{
+  version: 1,
+  type: "event",
+  event: "nodeview:loading"
+}]);
+posted.length = 0;
 
 const childWindow = {
   top: window,
@@ -292,6 +298,7 @@ assert.equal(childWindow.NodeViewJS, undefined);
 assert.equal(childWindow.NodeView, undefined);
 
 assert.equal(typeof window.NodeViewJS.invoke, "function");
+assert.equal(typeof window.NodeViewJS.ready, "function");
 assert.equal(window.NodeViewJS, window.NodeView);
 const invocation = window.NodeViewJS.invoke("platform", { name: "webkit" });
 const invocationId = posted[0].id;
@@ -304,6 +311,105 @@ assert.deepEqual(JSON.parse(JSON.stringify(posted[0])), {
 });
 assert.equal(Number.isSafeInteger(invocationId), true);
 assert.ok(invocationId > 0);
+
+window.NodeViewJS.emit("queued-before-ready", { value: 1 });
+assert.equal(posted.length, 1);
+window.NodeViewJS.ready();
+assert.deepEqual(JSON.parse(JSON.stringify(posted[1])), {
+  version: 1,
+  type: "event",
+  event: "nodeview:ready"
+});
+assert.deepEqual(JSON.parse(JSON.stringify(posted[2])), {
+  version: 1,
+  type: "event",
+  event: "queued-before-ready",
+  payload: { value: 1 }
+});
+const automaticPosted = [];
+const automaticTimers = [];
+const automaticDocument = { readyState: "loading" };
+const automaticWindow = {
+  webkit: {
+    messageHandlers: {
+      nodeview: {
+        postMessage(message) { automaticPosted.push(message); }
+      }
+    }
+  }
+};
+automaticWindow.top = automaticWindow;
+vm.runInNewContext(bridgeSource, {
+  document: automaticDocument,
+  window: automaticWindow,
+  setTimeout(handler) {
+    automaticTimers.push(handler);
+    return automaticTimers.length;
+  },
+  clearTimeout() {}
+});
+automaticWindow.NodeViewJS.emit("automatic-ready", { value: 2 });
+assert.deepEqual(JSON.parse(JSON.stringify(automaticPosted)), [{
+  version: 1,
+  type: "event",
+  event: "nodeview:loading"
+}]);
+assert.equal(automaticTimers.length, 1);
+automaticDocument.readyState = "complete";
+automaticTimers.shift()();
+assert.equal(automaticTimers.length, 1);
+automaticTimers.shift()();
+assert.deepEqual(JSON.parse(JSON.stringify(automaticPosted.slice(1))), [
+  { version: 1, type: "event", event: "nodeview:ready" },
+  { version: 1, type: "event", event: "automatic-ready", payload: { value: 2 } }
+]);
+
+const countBufferPosted = [];
+const countBufferWindow = {
+  webkit: {
+    messageHandlers: {
+      nodeview: {
+        postMessage(message) { countBufferPosted.push(message); }
+      }
+    }
+  }
+};
+countBufferWindow.top = countBufferWindow;
+vm.runInNewContext(bridgeSource, {
+  document: { readyState: "loading" },
+  window: countBufferWindow,
+  setTimeout() { return 1; },
+  clearTimeout() {}
+});
+for (let index = 0; index < 1024; index++) {
+  countBufferWindow.NodeViewJS.emit("buffered-by-count", { index });
+}
+assert.throws(
+  () => countBufferWindow.NodeViewJS.emit("buffered-by-count", { index: 1024 }),
+  /readiness buffer limit/
+);
+countBufferWindow.NodeViewJS.ready();
+assert.equal(countBufferPosted.length, 1026);
+assert.equal(countBufferPosted[2].payload.index, 0);
+assert.equal(countBufferPosted.at(-1).payload.index, 1023);
+
+const byteBufferWindow = {
+  webkit: { messageHandlers: { nodeview: { postMessage() {} } } }
+};
+byteBufferWindow.top = byteBufferWindow;
+vm.runInNewContext(bridgeSource, {
+  document: { readyState: "loading" },
+  window: byteBufferWindow,
+  setTimeout() { return 1; },
+  clearTimeout() {}
+});
+for (let index = 0; index < 5; index++) {
+  byteBufferWindow.NodeViewJS.emit("buffered-by-size", "x".repeat(200_000));
+}
+assert.throws(
+  () => byteBufferWindow.NodeViewJS.emit("buffered-by-size", "x".repeat(200_000)),
+  /readiness buffer limit/
+);
 
 const postedBeforeHostilePayload = posted.length;
 const hostilePayload = {};
@@ -373,6 +479,26 @@ const throwingLengthInvocation = window.NodeViewJS.invoke(
 );
 assert.equal(posted.length, postedBeforeOversizedArray);
 
+let changingReads = 0;
+let unsafeAfterValidation = "leaf";
+for (let index = 0; index <= 32; index++) unsafeAfterValidation = [unsafeAfterValidation];
+const changingPayload = {};
+Object.defineProperty(changingPayload, "value", {
+  enumerable: true,
+  get() {
+    changingReads++;
+    return changingReads === 1 ? "safe" : unsafeAfterValidation;
+  }
+});
+const changingPayloadInvocation = window.NodeViewJS.invoke(
+  "changing-payload",
+  changingPayload
+).then(
+  () => undefined,
+  (error) => error.message
+);
+assert.equal(posted.length, postedBeforeOversizedArray);
+
 window.__nodeviewReceive({
   version: 1,
   type: "response",
@@ -435,6 +561,7 @@ Promise.all([
   throwingToJSONInvocation,
   oversizedArrayInvocation,
   throwingLengthInvocation,
+  changingPayloadInvocation,
   ...queuedInvocations,
   overflowInvocation
 ]).then(([
@@ -443,6 +570,7 @@ Promise.all([
   throwingToJSONResult,
   oversizedArrayResult,
   throwingLengthResult,
+  changingPayloadResult,
   ...results
 ]) => {
   assert.equal(result, "ok");
@@ -450,6 +578,7 @@ Promise.all([
   assert.match(throwingToJSONResult, /size or complexity limit/);
   assert.match(oversizedArrayResult, /size or complexity limit/);
   assert.match(throwingLengthResult, /size or complexity limit/);
+  assert.match(changingPayloadResult, /size or complexity limit/);
   assert.match(results.at(-1), /Too many pending/);
   console.log("Platform boundary test passed.");
 }).catch((error) => {

@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Bridge parameter matrix test</title>
+  </head>
+  <body>
+    <script>
+      const waitForEvent = (eventName) => new Promise((resolve) => {
+        NodeViewJS.once(eventName, resolve);
+      });
+
+      let preReadyEvent = JSON.parse(sessionStorage.getItem("nodeview-matrix-pre-ready") || "null");
+      NodeViewJS.once("matrix:pre-ready", (payload) => {
+        preReadyEvent = payload;
+        sessionStorage.setItem("nodeview-matrix-pre-ready", JSON.stringify(payload));
+      });
+
+      const cycle = Number(sessionStorage.getItem("nodeview-matrix-cycle") || "0") + 1;
+      sessionStorage.setItem("nodeview-matrix-cycle", String(cycle));
+      NodeViewJS.once("matrix:cycle-ack", async ({ cycle: acknowledgedCycle }) => {
+        if (acknowledgedCycle !== cycle) return;
+        if (cycle < 3) {
+          location.reload();
+          return;
+        }
+
+        try {
+          const values = [
+            null,
+            true,
+            false,
+            0,
+            -1,
+            1.5,
+            "Hello \u20ac \ud83d\ude00",
+            [],
+            {},
+            { nested: [1, "two", false, null] }
+          ];
+          const echoedValues = await Promise.all(
+            values.map((value) => NodeViewJS.invoke("matrix:echo", value))
+          );
+          const noPayload = await NodeViewJS.invoke("matrix:noPayload");
+          const undefinedResult = (await NodeViewJS.invoke("matrix:undefinedResult")) === undefined;
+          const thrownError = await NodeViewJS.invoke("matrix:throw").then(
+            () => "",
+            (error) => error.message
+          );
+
+          const cyclic = {};
+          cyclic.self = cyclic;
+          const invalidValues = [() => {}, Symbol("invalid"), NaN, Infinity, 1n, cyclic];
+          const invalidErrors = await Promise.all(invalidValues.map((value) => (
+            NodeViewJS.invoke("matrix:echo", value).then(
+              () => "",
+              (error) => error.message
+            )
+          )));
+
+          const largeResult = await NodeViewJS.invoke("matrix:echo", "x".repeat(250_000));
+          const slowCalls = Array.from({ length: 64 }, (_, index) => (
+            NodeViewJS.invoke("matrix:slow", { index })
+          ));
+          const overflowError = await NodeViewJS.invoke("matrix:slow", { index: 64 }).then(
+            () => "",
+            (error) => error.message
+          );
+          const slowResults = await Promise.all(slowCalls);
+
+          const serverEventPromise = waitForEvent("matrix:server-event");
+          await NodeViewJS.invoke("matrix:requestServerEvent");
+          const serverEvent = await serverEventPromise;
+          const clientEventAckPromise = waitForEvent("matrix:client-event-ack");
+          NodeViewJS.emit("matrix:client-event", { source: "frontend" });
+          await clientEventAckPromise;
+          const status = await NodeViewJS.invoke("matrix:status");
+
+          NodeViewJS.emit("matrix:result", {
+            values: echoedValues,
+            noPayload,
+            undefinedResult,
+            thrownError,
+            invalidErrors,
+            largeLength: largeResult.length,
+            slowResults,
+            overflowError,
+            preReadyEvent,
+            serverEvent,
+            status
+          });
+        } catch (error) {
+          NodeViewJS.emit("matrix:result", { error: error.message });
+        }
+      });
+
+      NodeViewJS.emit("matrix:cycle", { cycle });
+    </script>
+  </body>
+</html>

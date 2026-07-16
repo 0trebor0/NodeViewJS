@@ -8,10 +8,15 @@
   const IPC_MAX_NAME_LENGTH = 128;
   const IPC_MAX_PENDING_REQUESTS = 64;
   const IPC_REQUEST_TIMEOUT_MS = 30000;
+  const BRIDGE_LOADING_EVENT = "nodeview:loading";
+  const BRIDGE_READY_EVENT = "nodeview:ready";
   const IPC_NAME_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._:-]*$/;
   const DANGEROUS_KEYS = new Set(["__proto__", "constructor", "prototype"]);
   const pending = new Map();
+  const pendingEvents = [];
   const listeners = new Map();
+  let pendingEventBytes = 0;
+  let readySent = false;
 
   function createInitialRequestId() {
     const values = new Uint32Array(2);
@@ -142,14 +147,7 @@
     return true;
   }
 
-  function serializedByteLength(value) {
-    if (!isSafePayload(value)) return Infinity;
-    let serialized;
-    try {
-      serialized = JSON.stringify(value);
-    } catch {
-      return Infinity;
-    }
+  function serializedByteLength(serialized) {
     let bytes = 0;
     for (let index = 0; index < serialized.length; index += 1) {
       const code = serialized.charCodeAt(index);
@@ -164,6 +162,20 @@
       } else bytes += 3;
     }
     return bytes;
+  }
+
+  function prepareMessage(value) {
+    if (!isSafePayload(value)) return undefined;
+    let serialized;
+    let snapshot;
+    try {
+      serialized = JSON.stringify(value);
+      if (serializedByteLength(serialized) > IPC_MAX_SERIALIZED_BYTES) return undefined;
+      snapshot = JSON.parse(serialized);
+    } catch {
+      return undefined;
+    }
+    return isSafePayload(snapshot) ? snapshot : undefined;
   }
 
   function receive(data) {
@@ -234,8 +246,26 @@
   }
 
   transport.listen(receive);
+  transport.post({ version: IPC_VERSION, type: "event", event: BRIDGE_LOADING_EVENT });
+
+  function signalReady() {
+    if (readySent) return Promise.resolve();
+    try {
+      transport.post({ version: IPC_VERSION, type: "event", event: BRIDGE_READY_EVENT });
+      readySent = true;
+      const events = pendingEvents.splice(0);
+      pendingEventBytes = 0;
+      for (const event of events) transport.post(event);
+      return Promise.resolve();
+    } catch (error) {
+      return Promise.reject(error);
+    }
+  }
 
   const api = Object.freeze({
+    ready() {
+      return signalReady();
+    },
     invoke(command, payload) {
       if (typeof command !== "string" || command.length === 0) {
         return Promise.reject(new TypeError("NodeViewJS.invoke requires a non-empty command name."));
@@ -250,7 +280,8 @@
       if (nextId >= Number.MAX_SAFE_INTEGER) nextId = createInitialRequestId();
       const message = { version: IPC_VERSION, type: "invoke", id, command };
       if (payload !== undefined) message.payload = payload;
-      if (serializedByteLength(message) > IPC_MAX_SERIALIZED_BYTES) {
+      const prepared = prepareMessage(message);
+      if (!prepared) {
         return Promise.reject(new RangeError("NodeViewJS IPC message exceeds the size or complexity limit."));
       }
       return new Promise((resolve, reject) => {
@@ -260,7 +291,7 @@
         }, IPC_REQUEST_TIMEOUT_MS);
         pending.set(id, { resolve, reject, timeout });
         try {
-          transport.post(message);
+          transport.post(prepared);
         } catch (error) {
           clearTimeout(timeout);
           pending.delete(id);
@@ -297,10 +328,19 @@
       requireEventName(eventName, "emit");
       const message = { version: IPC_VERSION, type: "event", event: eventName };
       if (payload !== undefined) message.payload = payload;
-      if (serializedByteLength(message) > IPC_MAX_SERIALIZED_BYTES) {
+      const prepared = prepareMessage(message);
+      if (!prepared) {
         throw new RangeError("NodeViewJS IPC message exceeds the size or complexity limit.");
       }
-      transport.post(message);
+      const bytes = serializedByteLength(JSON.stringify(prepared));
+      if (readySent) transport.post(prepared);
+      else {
+        if (pendingEvents.length >= 1024 || pendingEventBytes + bytes > 1024 * 1024) {
+          throw new RangeError("Pending NodeViewJS events exceed the bridge readiness buffer limit.");
+        }
+        pendingEvents.push(prepared);
+        pendingEventBytes += bytes;
+      }
     }
   });
 
@@ -315,4 +355,14 @@
     configurable: false,
     writable: false
   });
+
+  function signalReadyAfterLoad() {
+    if (readySent) return;
+    if (document.readyState === "complete") {
+      setTimeout(() => signalReady().catch(() => {}), 0);
+      return;
+    }
+    setTimeout(signalReadyAfterLoad, 10);
+  }
+  signalReadyAfterLoad();
 })();

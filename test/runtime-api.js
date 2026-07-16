@@ -81,6 +81,48 @@ const policyApp = new App({
   }
 });
 const secondaryWindow = app.createWindow({ title: "Secondary" });
+const readinessApp = new App({ entry: __filename });
+const readinessMessages = [];
+readinessApp.mainWindow._post = (message) => readinessMessages.push(JSON.parse(message));
+readinessApp.emit("queued-before-ready", { value: 1 });
+assert.deepEqual(readinessMessages, []);
+readinessApp.mainWindow._markBridgeReady();
+assert.deepEqual(readinessMessages, [{
+  version: 1,
+  type: "event",
+  event: "queued-before-ready",
+  payload: { value: 1 }
+}]);
+readinessApp.mainWindow._resetBridgeReady();
+readinessApp.emit("queued-after-reload", { value: 2 });
+assert.equal(readinessMessages.length, 1);
+readinessApp.mainWindow._markBridgeReady();
+assert.equal(readinessMessages[1].event, "queued-after-reload");
+
+const countBufferApp = new App({ entry: __filename });
+const countBufferMessages = [];
+countBufferApp.mainWindow._post = (message) => countBufferMessages.push(JSON.parse(message));
+for (let index = 0; index < 1024; index++) {
+  countBufferApp.emit("buffered-by-count", { index });
+}
+assert.throws(
+  () => countBufferApp.emit("buffered-by-count", { index: 1024 }),
+  /readiness buffer limit/
+);
+countBufferApp.mainWindow._markBridgeReady();
+assert.equal(countBufferMessages.length, 1024);
+assert.equal(countBufferMessages[0].payload.index, 0);
+assert.equal(countBufferMessages.at(-1).payload.index, 1023);
+
+const byteBufferApp = new App({ entry: __filename });
+byteBufferApp.mainWindow._post = () => {};
+for (let index = 0; index < 5; index++) {
+  byteBufferApp.emit("buffered-by-size", "x".repeat(200_000));
+}
+assert.throws(
+  () => byteBufferApp.emit("buffered-by-size", "x".repeat(200_000)),
+  /readiness buffer limit/
+);
 
 assert.equal(devToolsEnvironmentApp.options.devtools, true);
 assert.equal(explicitlyDisabledDevToolsApp.options.devtools, false);
@@ -248,7 +290,7 @@ assert.throws(
   () => secondaryWindow.showContextMenu([{ id: "context.copy", label: "Copy" }]),
   /has not been opened/
 );
-assert.throws(() => secondaryWindow.emit("before-open"), /has not been opened/);
+assert.equal(secondaryWindow.emit("before-open"), secondaryWindow);
 assert.equal(windowOptionsApp.options.center, true);
 assert.equal(windowOptionsApp.options.maximized, true);
 assert.equal(windowOptionsApp.options.alwaysOnTop, true);
@@ -669,7 +711,10 @@ async function testConfig() {
 async function testIpcCommandErrorDetail() {
   const postedIpcErrors = [];
   await ipcErrorApp._handleWindowMessage(
-    { _post(message) { postedIpcErrors.push(JSON.parse(message)); } },
+    {
+      _markBridgeReady() {},
+      _post(message) { postedIpcErrors.push(JSON.parse(message)); }
+    },
     runtime.ipc.serialize({
       version: 1,
       type: "invoke",
@@ -686,7 +731,30 @@ async function testIpcCommandErrorDetail() {
   }]);
 }
 
-Promise.all([testConfig(), testDevWatcher(), testIpcCommandErrorDetail()])
+async function testBridgeLifecycleMessages() {
+  const lifecycle = [];
+  const window = {
+    _dispatch() { lifecycle.push("dispatch"); },
+    _markBridgeReady() { lifecycle.push("ready"); },
+    _resetBridgeReady() { lifecycle.push("loading"); }
+  };
+  await app._handleWindowMessage(
+    window,
+    runtime.ipc.serialize(runtime.ipc.createEventMessage("nodeview:loading"))
+  );
+  await app._handleWindowMessage(
+    window,
+    runtime.ipc.serialize(runtime.ipc.createEventMessage("nodeview:ready"))
+  );
+  assert.deepEqual(lifecycle, ["loading", "ready"]);
+}
+
+Promise.all([
+  testConfig(),
+  testDevWatcher(),
+  testIpcCommandErrorDetail(),
+  testBridgeLifecycleMessages()
+])
   .then(() => console.log("Runtime API test passed."))
   .catch((error) => {
     console.error(error);

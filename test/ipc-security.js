@@ -122,6 +122,24 @@ assert.throws(
   /size limit/
 );
 
+let changingReads = 0;
+let unsafeAfterValidation = "leaf";
+for (let index = 0; index <= ipc.IPC_MAX_DEPTH; index += 1) {
+  unsafeAfterValidation = [unsafeAfterValidation];
+}
+const changingPayload = {};
+Object.defineProperty(changingPayload, "value", {
+  enumerable: true,
+  get() {
+    changingReads++;
+    return changingReads === 1 ? "safe" : unsafeAfterValidation;
+  }
+});
+assert.throws(
+  () => ipc.serialize(ipc.createEventMessage("changing", changingPayload)),
+  /changed to an unsupported payload/
+);
+
 const oversized = ipc.createEventMessage("large", "x".repeat(ipc.IPC_MAX_SERIALIZED_BYTES));
 assert.throws(() => ipc.serialize(oversized), /size limit/);
 assert.throws(() => ipc.createEventMessage("bad name"), /invalid/);

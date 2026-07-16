@@ -1184,32 +1184,28 @@ The helper is trusted backend code and is not exposed directly to the WebView. F
 
 ### Events
 
-Events are delivered only to listeners that already exist; they are not queued for a page that has not loaded yet. Do not call `app.emit()` before `app.run()` and expect the first page to receive it. For initial backend-to-frontend data, register the frontend listener first and use a readiness handshake.
+Events in both directions are buffered until the frontend bridge is ready. This includes `app.emit()` before `app.run()` and `NodeViewJS.emit()` while the page is still loading. Each direction preserves event order and is limited to 1,024 events or 1 MiB per window. The bridge flushes automatically just after the page's `load` handlers have run and resets the readiness state when a page reloads. Call `NodeViewJS.ready()` explicitly after installing listeners only when you want queued events delivered earlier.
 
-Backend readiness handshake:
+Backend startup event:
 
 ```js
-app.on("frontend-ready", () => {
-  app.emit("theme-changed", { theme: "dark" });
-});
-
+app.emit("theme-changed", { theme: "dark" });
 app.run();
 ```
 
-Frontend readiness handshake:
+Frontend listener setup:
 
 ```js
 window.addEventListener("load", () => {
   NodeViewJS.on("theme-changed", ({ theme }) => {
     document.documentElement.dataset.theme = theme;
   });
-
-  // Emit readiness only after all initial listeners are registered.
-  NodeViewJS.emit("frontend-ready");
 });
 ```
 
-`NodeViewJS.on()` and `NodeViewJS.once()` register listeners synchronously and return unsubscribe functions; do not `await` them.
+No manual handshake is required in the normal case. `NodeViewJS.ready()` is idempotent and remains available for advanced startup control. `NodeViewJS.on()` and `NodeViewJS.once()` register listeners synchronously and return unsubscribe functions; do not `await` them.
+
+`emit()` is one-way and does not acknowledge handler completion. When the frontend must wait for backend work or preserve a request/response dependency, use `invoke()`. For one-way workflows that still need confirmation, have the receiver emit a separate acknowledgement event.
 
 Backend:
 

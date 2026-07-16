@@ -17,9 +17,7 @@ const app = new App({
 app.command("greet", async ( object ) => {
   console.log(object);
 });
-app.on("frontend-ready", () => {
-  app.emit("hey", {msg:'Hello World!'});
-});
+app.emit("hey", {msg:'Hello World!'});
 app.run();
 try {
   app.showNotification({

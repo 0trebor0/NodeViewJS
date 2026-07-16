@@ -319,9 +319,12 @@ function resolveWindowOptions(options, fallback = {}, owner = "Window") {
 
 class AppWindow {
   #app;
+  #bridgeReady = false;
   #devWatcher;
   #eventHandlers = new Map();
   #id;
+  #pendingMessages = [];
+  #pendingMessageBytes = 0;
 
   constructor(app, options) {
     this.#app = app;
@@ -378,7 +381,17 @@ class AppWindow {
     if (typeof eventName !== "string" || eventName.length === 0) {
       throw new TypeError("Event name must be a non-empty string.");
     }
-    this._post(ipc.serialize(ipc.createEventMessage(eventName, payload)));
+    const message = ipc.serialize(ipc.createEventMessage(eventName, payload));
+    if (this.#bridgeReady) this._post(message);
+    else {
+      const bytes = Buffer.byteLength(message, "utf8");
+      if (this.#pendingMessages.length >= 1024
+          || this.#pendingMessageBytes + bytes > 1024 * 1024) {
+        throw new RangeError("Pending window events exceed the bridge readiness buffer limit.");
+      }
+      this.#pendingMessages.push(message);
+      this.#pendingMessageBytes += bytes;
+    }
     return this;
   }
 
@@ -399,11 +412,17 @@ class AppWindow {
       native().closeWindow(this.#id);
       this.#id = undefined;
     }
+    this.#bridgeReady = false;
+    this.#pendingMessages = [];
+    this.#pendingMessageBytes = 0;
     return this;
   }
 
   reload() {
-    if (this.#id !== undefined) native().reload(this.#id);
+    if (this.#id !== undefined) {
+      this._resetBridgeReady();
+      native().reload(this.#id);
+    }
     return this;
   }
 
@@ -603,7 +622,7 @@ class AppWindow {
       }
       native().loadFile(id, this.options.entry);
       if (process.env.NODEVIEW_DEV_WATCH === "1") {
-        this.#devWatcher = startDevWatcher(this.options.entry, () => native().reload(id));
+        this.#devWatcher = startDevWatcher(this.options.entry, () => this.reload());
       }
       if (showImmediately) native().showWindow(id);
     } catch (error) {
@@ -629,6 +648,19 @@ class AppWindow {
       throw new Error("Window has not been opened.");
     }
     native().postMessage(this.#id, serializedMessage);
+  }
+
+  _markBridgeReady() {
+    if (this.#bridgeReady) return;
+    this.#bridgeReady = true;
+    const messages = this.#pendingMessages;
+    this.#pendingMessages = [];
+    this.#pendingMessageBytes = 0;
+    for (const message of messages) this._post(message);
+  }
+
+  _resetBridgeReady() {
+    this.#bridgeReady = false;
   }
 }
 
@@ -893,9 +925,7 @@ class App {
       throw new TypeError("Event name must be a non-empty string.");
     }
 
-    for (const window of this.#windows) {
-      if (window.isOpen) window.emit(eventName, payload);
-    }
+    for (const window of this.#windows) window.emit(eventName, payload);
     return this;
   }
 
@@ -1107,12 +1137,25 @@ class App {
       return;
     }
 
+    if (message.type !== "event"
+        || (message.event !== "nodeview:loading" && message.event !== "nodeview:ready")) {
+      window._markBridgeReady();
+    }
+
     if (message.type === "invoke") {
       await this.#invoke(window, message);
       return;
     }
 
     if (message.type === "event" && typeof message.event === "string") {
+      if (message.event === "nodeview:loading") {
+        window._resetBridgeReady();
+        return;
+      }
+      if (message.event === "nodeview:ready") {
+        window._markBridgeReady();
+        return;
+      }
       await window._dispatch(message.event, message.payload);
       for (const handler of [...this.#eventHandlers.get(message.event) ?? []]) {
         await handler(message.payload);

@@ -74,6 +74,11 @@ async function main() {
   const handleMessage = messageHandlers.get(windowId);
   await handleMessage(JSON.stringify({
     version: 1,
+    type: "event",
+    event: "nodeview:ready"
+  }));
+  await handleMessage(JSON.stringify({
+    version: 1,
     type: "invoke",
     id: 7,
     command: "example.settings:read",

@@ -96,7 +96,7 @@ function Invoke-CodeSigning($FilePath) {
   }
 }
 
-function Wait-ForInstallerOutput($FilePath, $TimeoutSeconds = 120) {
+function Wait-ForInstallerOutput($FilePath, $MinimumBytes, $TimeoutSeconds = 120) {
   $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
   $lastLength = -1
   $stableChecks = 0
@@ -104,7 +104,7 @@ function Wait-ForInstallerOutput($FilePath, $TimeoutSeconds = 120) {
   while ([DateTime]::UtcNow -lt $deadline) {
     if (Test-Path $FilePath) {
       $length = (Get-Item -LiteralPath $FilePath).Length
-      if ($length -gt 0 -and $length -eq $lastLength) {
+      if ($length -ge $MinimumBytes -and $length -eq $lastLength) {
         $stableChecks++
         if ($stableChecks -ge 2) {
           return
@@ -338,8 +338,11 @@ SourceFiles0=$staging\
 Set-Content -LiteralPath $sed -Value $sedContent -Encoding ASCII
 
 Remove-Item -LiteralPath $output -Force -ErrorAction SilentlyContinue
+Get-ChildItem (Split-Path $output -Parent) -Filter "RCX*.tmp" -File -ErrorAction SilentlyContinue |
+  Remove-Item -Force -ErrorAction SilentlyContinue
 & $iexpress /N /Q $sed
-Wait-ForInstallerOutput $output
+$minimumInstallerBytes = [Math]::Max(1MB, [Math]::Floor((Get-Item -LiteralPath $payload).Length / 2))
+Wait-ForInstallerOutput $output $minimumInstallerBytes
 
 Invoke-CodeSigning $output
 if (!$KeepStaging) {

@@ -194,6 +194,15 @@ function serialize(message) {
   if (serialized === undefined || Buffer.byteLength(serialized, "utf8") > IPC_MAX_SERIALIZED_BYTES) {
     throw new RangeError("IPC message exceeds the serialized size limit.");
   }
+  let snapshot;
+  try {
+    snapshot = JSON.parse(serialized);
+  } catch {
+    throw new TypeError("IPC message changed during serialization.");
+  }
+  if (!isSafePayload(snapshot)) {
+    throw new TypeError("IPC message changed to an unsupported payload during serialization.");
+  }
   return serialized;
 }
 

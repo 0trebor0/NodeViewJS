@@ -14,7 +14,6 @@
           console.log(data);
           document.getElementById("title").innerText = data.msg;
         });
-        NodeViewJS.emit("frontend-ready");
         await NodeViewJS.invoke("greet", {'test':'Hello World!'});
       }
     </script>
