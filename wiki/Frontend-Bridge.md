@@ -15,7 +15,14 @@ const result = await NodeViewJS.invoke("settings:read", {
 Backend:
 
 ```js
-app.command("settings:read", async ({ section }) => {
+app.command("settings:read", (payload) => {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    throw new TypeError("settings:read requires an object payload.");
+  }
+  const { section } = payload;
+  if (typeof section !== "string" || section.trim() === "") {
+    throw new TypeError("section must be a non-empty string.");
+  }
   return { section, theme: "dark" };
 });
 ```
@@ -102,4 +109,3 @@ Before transport, the bridge creates and revalidates a detached JSON snapshot. S
 - Frontend `console.log()` appears in WebView DevTools during development.
 - Backend `console.log()` appears in the terminal or backend log.
 - Packaged Windows apps disable DevTools.
-

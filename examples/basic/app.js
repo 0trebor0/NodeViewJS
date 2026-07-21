@@ -1,9 +1,6 @@
 "use strict";
 
 const path = require("node:path");
-const fs = require("node:fs/promises");
-const os = require("node:os");
-const { pathToFileURL } = require("node:url");
 const { App } = require("../../runtime");
 
 const app = new App({
@@ -14,8 +11,15 @@ const app = new App({
   devtools: process.env.NODEVIEW_DEVTOOLS === "1",
   entry: path.join(__dirname, "index.html")
 });
-app.command("greet", async ( object ) => {
-  console.log(object);
+app.command("greet", (payload) => {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    throw new TypeError("greet requires an object payload.");
+  }
+  const { name } = payload;
+  if (typeof name !== "string" || name.trim() === "") {
+    throw new TypeError("name must be a non-empty string.");
+  }
+  return { message: `Hello ${name}` };
 });
 app.emit("hey", {msg:'Hello World!'});
 app.run();

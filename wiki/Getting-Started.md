@@ -35,9 +35,16 @@ const app = new App({
   entry: path.join(__dirname, "index.html")
 });
 
-app.command("greet", async ({ name }) => ({
-  message: `Hello ${name || "there"}`
-}));
+app.command("greet", (payload) => {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    throw new TypeError("greet requires an object payload.");
+  }
+  const { name } = payload;
+  if (typeof name !== "string" || name.trim() === "") {
+    throw new TypeError("name must be a non-empty string.");
+  }
+  return { message: `Hello ${name}` };
+});
 
 app.run();
 ```
@@ -84,4 +91,3 @@ npx nodeviewjs package
 ```
 
 See [[Packaging and Distribution]] for installers, signing, and updates.
-

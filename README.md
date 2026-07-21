@@ -1,10 +1,13 @@
 # NodeViewJS
 
+[![CI](https://github.com/0trebor0/NodeViewJS/actions/workflows/ci.yml/badge.svg)](https://github.com/0trebor0/NodeViewJS/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 NodeViewJS is a lightweight desktop runtime for building small apps with Node.js, vanilla HTML/CSS/JavaScript, and the operating system web view. Windows uses WebView2, macOS uses WKWebView, and Linux uses WebKitGTK.
 
 It gives your frontend a safe `window.NodeViewJS` bridge and keeps privileged work in registered Node.js commands. It does not expose raw Node.js APIs such as `require()` to the WebView.
 
-> This project and its implementation plan were created with GPT assistance.
+For task-focused documentation, see the [documentation wiki](https://github.com/0trebor0/NodeViewJS/tree/main/wiki).
 
 ## Current status
 
@@ -222,9 +225,16 @@ const app = new App({
   entry: path.join(__dirname, "index.html")
 });
 
-app.command("greet", async ({ name }) => {
+app.command("greet", (payload) => {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    throw new TypeError("greet requires an object payload.");
+  }
+  const { name } = payload;
+  if (typeof name !== "string" || name.trim() === "") {
+    throw new TypeError("name must be a non-empty string.");
+  }
   console.log("Greeting:", name);
-  return { message: `Hello ${name || "there"} from NodeViewJS` };
+  return { message: `Hello ${name} from NodeViewJS` };
 });
 
 app.run();
@@ -237,7 +247,7 @@ app.run();
 <html>
   <body>
     <h1>My App</h1>
-    <input id="name" value="Robert" />
+    <input id="name" value="World" />
     <button id="greet">Greet</button>
     <p id="output"></p>
 
@@ -247,7 +257,10 @@ app.run();
       const output = document.querySelector("#output");
 
       greetButton.onclick = async () => {
-        output.textContent = await NodeViewJS.invoke("greet", nameInput.value);
+        const result = await NodeViewJS.invoke("greet", {
+          name: nameInput.value
+        });
+        output.textContent = result.message;
       };
     </script>
   </body>
@@ -589,8 +602,15 @@ const app = new App({
   entry: path.join(__dirname, "index.html")
 });
 
-app.command("greet", async (name) => {
-  return `Hello ${name || "there"} from NodeViewJS`;
+app.command("greet", (payload) => {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    throw new TypeError("greet requires an object payload.");
+  }
+  const { name } = payload;
+  if (typeof name !== "string" || name.trim() === "") {
+    throw new TypeError("name must be a non-empty string.");
+  }
+  return { message: `Hello ${name} from NodeViewJS` };
 });
 
 app.run();

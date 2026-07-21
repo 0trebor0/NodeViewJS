@@ -21,7 +21,11 @@ NodeViewJS separates an untrusted WebView frontend from a trusted Node.js backen
 Structural IPC validation does not replace semantic validation. A command that accepts a path, identifier, query, or permission-sensitive action must validate and authorize that value inside the handler.
 
 ```js
-app.command("records:read", async ({ id }) => {
+app.command("records:read", async (payload) => {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    throw new TypeError("records:read requires an object payload.");
+  }
+  const { id } = payload;
   if (!Number.isSafeInteger(id) || id <= 0) {
     throw new TypeError("Record id must be a positive integer.");
   }
@@ -34,4 +38,3 @@ app.command("records:read", async ({ id }) => {
 Use [GitHub Security Advisories](https://github.com/0trebor0/NodeViewJS/security/advisories/new). Do not disclose working exploits, credentials, private data, or unpatched vulnerability details in a public issue.
 
 For the authoritative policy and current guarantee matrix, read `SECURITY.md` in the repository.
-

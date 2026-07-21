@@ -14,7 +14,8 @@
           console.log(data);
           document.getElementById("title").innerText = data.msg;
         });
-        await NodeViewJS.invoke("greet", {'test':'Hello World!'});
+        const result = await NodeViewJS.invoke("greet", { name: "World" });
+        console.log(result.message);
       }
     </script>
   </body>
