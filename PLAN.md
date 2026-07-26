@@ -36,7 +36,7 @@ The Windows implementation queues below are complete. macOS and Linux security p
 
 | ID | Work item | Status | Completion target |
 | --- | --- | --- | --- |
-| REL-01 | `v0.1.0` release-candidate audit | Complete | The npm tarball includes the MIT license and intended source/runtime files without build output, tests, secrets, keys, certificates, source maps, or environment files. An isolated tarball install builds native outputs, loads the public API, and runs the installed CLI. The full GitHub CI matrix passes. |
+| REL-01 | `v0.1.0` release-candidate audit | CI validation pending | The npm tarball includes the MIT license and intended source/runtime files without build output, tests, secrets, keys, certificates, source maps, or environment files. An isolated tarball install builds native outputs, loads the public API, and runs the installed CLI. The Windows, macOS 14, and Ubuntu 24.04 GitHub Actions jobs are configured; their first run must pass before this item returns to Complete. |
 | REL-02 | Sign, tag, and publish `v0.1.0` | Blocked on release configuration | Choose npm, GitHub Releases, or both; configure the required publishing credentials. Any distributed Windows launcher/installer must use a production Authenticode certificate and timestamp. Apps publishing signed update metadata must keep their Ed25519 private key outside the repository. |
 
 ### Remaining Runtime Work
@@ -57,8 +57,8 @@ The Windows implementation queues below are complete. macOS and Linux security p
 | L-03 | Embedded executable icon and Windows installer | Complete | Target-specific icon/version resources are compiled into the launcher. `npm run test:installer` verifies package, quiet install, metadata/registration, installed launch, and clean uninstall. |
 | L-04 | Auto-update support | Complete | HTTPS-only Ed25519 manifests bind app id, version, URL, size, and SHA-256. The updater rejects downgrades/tampering, stages atomically, re-verifies at handoff, waits for old processes, applies transactionally, restarts, and has focused updater plus installer rollback tests. |
 | L-05 | Plugin system | Complete | `app.use()` provides explicit backend-only plugins, namespaced commands/events, host and command permission checks, transactional setup, lifecycle cleanup, immutable metadata, and focused routing/lifecycle tests. |
-| L-06 | macOS support | Complete | The macOS 14 CI lane compiles the WKWebView host and Mach-O launcher, packages `.app`/DMG output, and passes unit, live bridge, and multi-window tests. Optional Developer ID signing/notarization remains configuration-dependent. |
-| L-07 | Linux support | Complete | The Ubuntu 24.04 CI lane compiles the GTK 3/WebKitGTK 4.1 host and POSIX launcher, packages the portable app folder, and passes unit, live bridge under Xvfb, and multi-window tests. |
+| L-06 | macOS support | CI validation pending | The macOS 14 CI lane compiles the WKWebView host and Mach-O launcher, packages `.app`/DMG output, and runs unit, live bridge, and multi-window tests. Optional Developer ID signing/notarization remains configuration-dependent. |
+| L-07 | Linux support | CI validation pending | The Ubuntu 24.04 CI lane compiles the GTK 3/WebKitGTK 4.1 host and POSIX launcher, packages the portable app folder, and runs unit, live bridge under Xvfb, and multi-window tests. |
 
 Basic file dialogs, notifications, system tray support, and command permissions are already complete and are not duplicated as future work.
 
@@ -146,8 +146,8 @@ macOS and Linux security-parity work is deferred for now, and each cross-platfor
 - Opt-in Windows single-instance apps use a native mutex plus bounded local named-pipe messages to focus the primary window and deliver subsequent launch arguments.
 - Windows installers register validated custom protocols and file types per user, while runtime launch routing emits `open-url` and `open-file` for cold starts and later single-instance launches.
 - Windows application and context menus use bounded declarative templates, native accelerator tables, and backend-only ID events rather than executable menu callbacks.
-- The macOS implementation has a CI-verified WKWebView host, native launcher, `.app` and DMG packaging, WebKit bridge transport, and multi-window routing.
-- Linux has a CI-verified GTK 3/WebKitGTK 4.1 native host, POSIX launcher, and portable app-folder packager. Runtime paths use `XDG_DATA_HOME` (or `~/.local/share`) and isolate WebKitGTK profiles by stable app id.
+- The macOS implementation includes a WKWebView host, native launcher, `.app` and DMG packaging, WebKit bridge transport, and multi-window routing; hosted CI validation is pending.
+- Linux includes a GTK 3/WebKitGTK 4.1 native host, POSIX launcher, and portable app-folder packager; hosted CI validation is pending. Runtime paths use `XDG_DATA_HOME` (or `~/.local/share`) and isolate WebKitGTK profiles by stable app id.
 
 ### Current blocker
 

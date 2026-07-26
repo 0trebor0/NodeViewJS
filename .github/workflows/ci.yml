@@ -1,0 +1,116 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CI: "true"
+
+jobs:
+  windows:
+    name: Windows
+    runs-on: windows-2022
+    timeout-minutes: 45
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Set up Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: "22"
+          package-manager-cache: false
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+      - name: Run unit and packaging tests
+        run: npm test
+      - name: Run release security gate
+        run: npm run security:gate
+      - name: Run live bridge tests
+        run: npm run test:bridge
+      - name: Run native security integrations
+        shell: pwsh
+        run: |
+          $scripts = @(
+            "test:raw-webmessage",
+            "test:ipc-security-integration",
+            "test:trusted-document",
+            "test:webview-capabilities",
+            "test:multi-window",
+            "test:menu-native",
+            "test:tray-menu-native",
+            "test:taskbar-native",
+            "test:notification-native"
+          )
+          foreach ($script in $scripts) {
+            npm run $script
+            if ($LASTEXITCODE -ne 0) {
+              exit $LASTEXITCODE
+            }
+          }
+      - name: Preview npm package
+        run: npm pack --dry-run
+
+  macos:
+    name: macOS
+    runs-on: macos-14
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Set up Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: "22"
+          package-manager-cache: false
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+      - name: Build native host
+        run: npm run build
+      - name: Run tests
+        run: npm test
+      - name: Run live bridge tests
+        run: npm run test:bridge
+      - name: Run multi-window integration
+        run: npm run test:multi-window
+      - name: Package app and DMG
+        run: npm run package:macos
+
+  linux:
+    name: Linux
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Set up Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: "22"
+          package-manager-cache: false
+      - name: Install native dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes libgtk-3-dev libwebkit2gtk-4.1-dev pkg-config xvfb xauth
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+      - name: Build native host
+        run: npm run build
+      - name: Run tests
+        run: npm test
+      - name: Run live bridge tests
+        run: xvfb-run --auto-servernum npm run test:bridge
+      - name: Run multi-window integration
+        run: xvfb-run --auto-servernum npm run test:multi-window
+      - name: Package app folder
+        run: npm run package:linux

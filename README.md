@@ -19,7 +19,7 @@ NodeViewJS is an early cross-platform runtime. The current version can:
 - package Windows portable folders/installers, macOS `.app`/DMG output, and Linux portable folders;
 - create independent native windows with isolated WebViews and IPC routing.
 
-Windows is verified locally. macOS and Linux support is included, but hosted continuous integration is not currently configured.
+Windows is verified locally. GitHub Actions also builds and tests Windows, macOS 14, and Ubuntu 24.04; Linux live WebKitGTK tests run under Xvfb.
 
 The `v0.1.0` release candidate has not been tagged or published; production signing and registry/release credentials are intentionally external to the repository.
 
