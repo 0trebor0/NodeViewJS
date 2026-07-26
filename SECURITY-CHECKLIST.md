@@ -12,7 +12,7 @@ Run this checklist from a clean release candidate on Windows with Python 3, Visu
 - [ ] Confirm malformed IPC and integrity-manifest corpus tests pass.
 - [ ] Confirm package-input, package-tamper, updater, and installer tests pass.
 
-The Windows CI job runs the same `security:gate` command. A release must not bypass or soften a failing gate.
+Run the same `security:gate` command for every Windows release candidate. A release must not bypass or soften a failing gate.
 
 ## Privileged API review
 

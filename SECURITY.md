@@ -49,7 +49,7 @@ Packaged local HTML, CSS, and JavaScript are application code, but they remain u
 - Packaged builds reference a copied local bridge script from prepared HTML and direct native hosts to skip development bridge injection.
 - Windows packaging accepts only canonical project-contained inputs and destinations, rejects links/reparse points and traversal, excludes common secret-bearing files, and emits redacted optional credential-pattern warnings.
 - Windows packages bind a deterministic manifest for every `resources` file into the launcher. The launcher rejects modified manifests, paths, links, missing/extra files, size changes, or SHA-256 mismatches before starting Node.
-- Windows release builds enable SDL checks, Spectre mitigation, Control Flow Guard, ASLR, DEP, and CET compatibility for the addon and launcher. CI verifies the resulting PE headers and also runs repository and package-surface secret and hidden-character scanning before and after generated native build files exist, production dependency auditing, warning-as-error MSVC analysis, malformed-input corpora, package tamper checks, and installer smoke through `npm run security:gate`.
+- Windows release builds enable SDL checks, Spectre mitigation, Control Flow Guard, ASLR, DEP, and CET compatibility for the addon and launcher. `npm run security:gate` verifies the resulting PE headers and also runs repository and package-surface secret and hidden-character scanning before and after generated native build files exist, production dependency auditing, warning-as-error MSVC analysis, malformed-input corpora, package tamper checks, and installer smoke.
 
 ## Known limitations and non-goals
 

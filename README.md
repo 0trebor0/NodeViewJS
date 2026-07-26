@@ -19,7 +19,7 @@ NodeViewJS is an early cross-platform runtime. The current version can:
 - package Windows portable folders/installers, macOS `.app`/DMG output, and Linux portable folders;
 - create independent native windows with isolated WebViews and IPC routing.
 
-Windows is verified locally. GitHub Actions also builds and tests Windows, macOS 14, and Ubuntu 24.04; Linux live WebKitGTK tests run under Xvfb.
+Windows is verified locally. Independent macOS and Linux validation is still pending.
 
 The `v0.1.0` release candidate has not been tagged or published; production signing and registry/release credentials are intentionally external to the repository.
 
@@ -1440,9 +1440,6 @@ nodeviewjs/
     package-integrity.js
     runtime-api.js
     security-corpus.js
-  .github/
-    workflows/
-      ci.yml
   LICENSE
   PLAN.md
   README.md
@@ -1479,6 +1476,15 @@ npm run test:webview-capabilities
 ```
 
 Live integration tests open native WebView windows briefly. `npm run test:installer` performs a per-user package, install, launch, replacement, rollback, and uninstall smoke test on Windows.
+
+### Help test macOS and Linux
+
+Independent macOS and Linux reports are welcome. Follow
+[PLATFORM-TESTING.md](PLATFORM-TESTING.md) for the priority environment matrix,
+exact commands, manual package checks, completion criteria, and safe reporting
+requirements. Submit results in an issue titled
+`[Platform test]: <platform and version>`. General contribution expectations are in
+[CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Troubleshooting
 

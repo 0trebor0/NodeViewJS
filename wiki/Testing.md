@@ -43,3 +43,10 @@ The gate includes repository scanning, production dependency audit, MSVC securit
 
 Run GUI/native tests from an interactive desktop session. Restricted or headless shells can prevent WebView2 windows from initializing or delivering messages.
 
+## macOS and Linux volunteers
+
+The repository's [macOS and Linux test plan](../PLATFORM-TESTING.md) defines the
+priority operating systems and architectures, clean-build commands, package
+smoke checks, evidence requirements, and completion criteria. Submit results in
+an issue titled `[Platform test]: <platform and version>`.
+
