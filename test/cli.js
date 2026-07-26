@@ -7,6 +7,35 @@ const { spawnSync } = require("node:child_process");
 const path = require("node:path");
 
 const cli = path.join(__dirname, "..", "bin", "nodeviewjs.js");
+const prerequisiteCheck = path.join(__dirname, "..", "scripts", "check-native-prerequisites.js");
+
+function findPythonExecutable() {
+  const configured = process.env.PYTHON || process.env.npm_config_python;
+  if (configured) {
+    const result = spawnSync(
+      configured,
+      ["-c", "import sys; print(sys.executable)"],
+      { encoding: "utf8" }
+    );
+    if (result.status === 0) return result.stdout.trim();
+    return undefined;
+  }
+  for (const [command, args] of process.platform === "win32"
+    ? [["py", ["-3"]], ["python3", []], ["python", []]]
+    : [["python3", []], ["python", []]]) {
+    const result = spawnSync(
+      command,
+      [...args, "-c", "import sys; print(sys.executable)"],
+      { encoding: "utf8" }
+    );
+    if (result.status === 0) return result.stdout.trim();
+  }
+  return undefined;
+}
+
+function hasPython() {
+  return Boolean(findPythonExecutable());
+}
 
 const help = spawnSync(process.execPath, [cli, "--help"], { encoding: "utf8" });
 assert.equal(help.status, 0);
@@ -37,6 +66,37 @@ assert.equal(rejected.status, 1);
 assert.match(rejected.stderr, /\[NodeViewJS dev\] Backend crashed with an unhandled promise rejection/);
 assert.match(rejected.stderr, /deliberate rejection/);
 
+const pythonExecutable = findPythonExecutable();
+if (pythonExecutable) {
+  const configuredPython = spawnSync(process.execPath, [prerequisiteCheck], {
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      PATH: `${path.dirname(pythonExecutable)}${path.delimiter}${process.env.PATH ?? ""}`,
+      PYTHON: path.basename(pythonExecutable)
+    }
+  });
+  assert.equal(configuredPython.status, 0, configuredPython.stderr);
+}
+
+const missingPython = spawnSync(process.execPath, [prerequisiteCheck], {
+  encoding: "utf8",
+  env: {
+    ...process.env,
+    PYTHON: path.join(brokenRoot, "missing-python.exe")
+  }
+});
+assert.equal(missingPython.status, 1);
+assert.match(missingPython.stderr, /NodeViewJS native builds require Python 3 for node-gyp/);
+assert.match(missingPython.stderr, /winget install Python\.Python\.3\.12/);
+
+const buildScript = fs.readFileSync(path.join(__dirname, "..", "scripts", "build.ps1"), "utf8");
+assert.ok(
+  buildScript.indexOf("check-native-prerequisites.js")
+    < buildScript.indexOf("setup-webview2.ps1"),
+  "Native prerequisite checks must run before WebView2 setup."
+);
+
 const createRoot = fs.mkdtempSync(path.join(os.tmpdir(), "nodeviewjs-create-"));
 const created = spawnSync(process.execPath, [cli, "create", "StarterApp"], {
   cwd: createRoot,
@@ -49,6 +109,13 @@ assert.ok(fs.existsSync(path.join(createRoot, "StarterApp", "index.html")));
 assert.ok(fs.existsSync(path.join(createRoot, "StarterApp", "assets", ".gitkeep")));
 assert.ok(fs.existsSync(path.join(createRoot, "StarterApp", "assets", "README.md")));
 assert.match(fs.readFileSync(path.join(createRoot, "StarterApp", "package.json"), "utf8"), /"package": "nodeviewjs package"/);
+
+const basicBackend = fs.readFileSync(path.join(__dirname, "..", "examples", "basic", "app.js"), "utf8");
+const basicFrontend = fs.readFileSync(path.join(__dirname, "..", "examples", "basic", "index.html"), "utf8");
+assert.match(basicBackend, /app\.command\("greet", \(name\) =>/);
+assert.match(basicBackend, /return `Hello \$\{name\}`/);
+assert.match(basicFrontend, /NodeViewJS\.invoke\("greet", "World"\)/);
+assert.doesNotMatch(basicFrontend, /result\.message/);
 assert.match(fs.readFileSync(path.join(createRoot, "StarterApp", "package.json"), "utf8"), /"installer": "nodeviewjs installer"/);
 assert.match(fs.readFileSync(path.join(createRoot, "StarterApp", "package.json"), "utf8"), /"update:manifest": "nodeviewjs update-manifest"/);
 assert.match(
@@ -126,7 +193,8 @@ fs.writeFileSync(path.join(fixture, "assets", "app.ico"), Buffer.from([
 fs.writeFileSync(path.join(fixture, "assets", "logo.txt"), "logo");
 fs.writeFileSync(path.join(fixture, "assets", "private", "secret.txt"), "secret");
 
-const skipNativeRebuild = process.platform === "win32" && process.env.CI === "true";
+const skipNativeRebuild = process.platform === "win32"
+  && (process.env.CI === "true" || !hasPython());
 const packaged = spawnSync(process.execPath, [cli, "package"], {
   cwd: fixture,
   encoding: "utf8",

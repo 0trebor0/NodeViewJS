@@ -56,6 +56,7 @@ struct WebViewState {
   EventRegistrationToken frame_navigation_starting_token{};
   EventRegistrationToken source_changed_token{};
   EventRegistrationToken content_loading_token{};
+  EventRegistrationToken navigation_completed_token{};
   EventRegistrationToken new_window_token{};
   EventRegistrationToken permission_token{};
   EventRegistrationToken web_resource_token{};
@@ -69,6 +70,7 @@ struct WebViewState {
   bool frame_navigation_handler_registered = false;
   bool source_changed_handler_registered = false;
   bool content_loading_handler_registered = false;
+  bool navigation_completed_handler_registered = false;
   bool new_window_handler_registered = false;
   bool permission_handler_registered = false;
   bool web_resource_handler_registered = false;
@@ -87,19 +89,48 @@ namespace {
 using Microsoft::WRL::Callback;
 using nodeview::WebViewState;
 
-constexpr wchar_t kAppVirtualHost[] = L"app.nodeview.local";
-constexpr wchar_t kAppVirtualOrigin[] = L"https://app.nodeview.local/";
+constexpr wchar_t kAppVirtualHost[] = L"app.nodeview.example";
+constexpr wchar_t kAppVirtualOrigin[] = L"https://app.nodeview.example/";
 
 void ReportWebViewError(const WebViewState& state, const wchar_t* message) {
   fwprintf(stderr, L"[NodeViewJS native] %ls\n", message);
   fflush(stderr);
+  if (GetEnvironmentVariableW(L"NODEVIEW_NATIVE_TRACE", nullptr, 0) != 0) return;
   MessageBox(state.window, message, L"NodeViewJS", MB_OK | MB_ICONERROR);
+}
+
+void TraceWebView(const wchar_t* message) {
+  if (GetEnvironmentVariableW(L"NODEVIEW_NATIVE_TRACE", nullptr, 0) == 0) return;
+  fwprintf(stderr, L"[NodeViewJS native trace] %ls\n", message);
+  fflush(stderr);
 }
 
 std::wstring FormatHResult(HRESULT result) {
   std::wstringstream stream;
   stream << L"0x" << std::hex << static_cast<unsigned long>(result);
   return stream.str();
+}
+
+void TraceWebView(const wchar_t* message, HRESULT result) {
+  if (GetEnvironmentVariableW(L"NODEVIEW_NATIVE_TRACE", nullptr, 0) == 0) return;
+  fwprintf(
+      stderr,
+      L"[NodeViewJS native trace] %ls (HRESULT: %ls)\n",
+      message,
+      FormatHResult(result).c_str());
+  fflush(stderr);
+}
+
+void TraceWebView(
+    const wchar_t* message,
+    COREWEBVIEW2_WEB_ERROR_STATUS status) {
+  if (GetEnvironmentVariableW(L"NODEVIEW_NATIVE_TRACE", nullptr, 0) == 0) return;
+  fwprintf(
+      stderr,
+      L"[NodeViewJS native trace] %ls (WebView status: %d)\n",
+      message,
+      static_cast<int>(status));
+  fflush(stderr);
 }
 
 void ReportWebViewError(
@@ -183,6 +214,41 @@ bool ArePathsEqual(
   return left_part == left.end() && right_part == right.end();
 }
 
+bool EnsureDirectoryExists(const std::filesystem::path& directory) {
+  if (directory.empty()) return false;
+
+  const std::wstring directory_name = directory.wstring();
+  if (GetEnvironmentVariableW(L"NODEVIEW_NATIVE_TRACE", nullptr, 0) != 0) {
+    fwprintf(stderr, L"[NodeViewJS native trace] ensure directory %ls\n", directory_name.c_str());
+    fflush(stderr);
+  }
+  const DWORD attributes = GetFileAttributesW(directory_name.c_str());
+  if (attributes != INVALID_FILE_ATTRIBUTES) {
+    return (attributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+  }
+
+  const std::filesystem::path parent = directory.parent_path();
+  if (!parent.empty() && parent != directory && !EnsureDirectoryExists(parent)) {
+    return false;
+  }
+
+  if (CreateDirectoryW(directory_name.c_str(), nullptr)) {
+    return true;
+  }
+
+  const DWORD error = GetLastError();
+  if (GetEnvironmentVariableW(L"NODEVIEW_NATIVE_TRACE", nullptr, 0) != 0) {
+    fwprintf(stderr, L"[NodeViewJS native trace] CreateDirectoryW failed: %lu\n", error);
+    fflush(stderr);
+  }
+  if (error != ERROR_ALREADY_EXISTS) {
+    return false;
+  }
+  const DWORD created_attributes = GetFileAttributesW(directory_name.c_str());
+  return created_attributes != INVALID_FILE_ATTRIBUTES &&
+      (created_attributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+}
+
 bool TryGetAllowedDocumentPath(
     const WebViewState& state,
     const wchar_t* uri,
@@ -252,6 +318,7 @@ HRESULT HandleWebResourceRequested(
       SUCCEEDED(request->get_Uri(&uri)) &&
       IsAllowedNavigation(state, uri);
   if (allowed) {
+    TraceWebView(L"allowed WebView resource request");
     CoTaskMemFree(uri);
     return S_OK;
   }
@@ -386,6 +453,7 @@ HRESULT HandleNavigationStarting(
   LPWSTR uri = nullptr;
   const HRESULT uri_result = args->get_Uri(&uri);
   const bool allowed = SUCCEEDED(uri_result) && IsAllowedNavigation(state, uri);
+  TraceWebView(allowed ? L"allowed top-level navigation" : L"blocked top-level navigation");
 
   if (!allowed) {
     args->put_Cancel(TRUE);
@@ -408,6 +476,7 @@ HRESULT HandleFrameNavigationStarting(
   LPWSTR uri = nullptr;
   const HRESULT uri_result = args->get_Uri(&uri);
   const bool allowed = SUCCEEDED(uri_result) && IsAllowedFrameNavigation(state, uri);
+  TraceWebView(allowed ? L"allowed frame navigation" : L"blocked frame navigation");
   if (!allowed) {
     args->put_Cancel(TRUE);
     fwprintf(
@@ -423,6 +492,7 @@ HRESULT HandleFrameNavigationStarting(
 void TrustCurrentTopLevelDocument(WebViewState& state) {
   if (!state.webview) {
     state.trusted_document.clear();
+    TraceWebView(L"trusted document cleared because WebView is not ready");
     return;
   }
 
@@ -433,8 +503,10 @@ void TrustCurrentTopLevelDocument(WebViewState& state) {
   CoTaskMemFree(source);
   if (trusted) {
     state.trusted_document = std::move(document_path);
+    TraceWebView(L"trusted current top-level document");
   } else {
     state.trusted_document.clear();
+    TraceWebView(L"trusted document cleared because current source is not allowed");
   }
 }
 
@@ -442,6 +514,7 @@ bool IsTrustedWebMessage(
     WebViewState& state,
     ICoreWebView2WebMessageReceivedEventArgs* args) {
   if (!state.webview || state.trusted_document.empty()) {
+    TraceWebView(L"blocked WebMessage because trusted document is empty");
     return false;
   }
 
@@ -462,6 +535,9 @@ bool IsTrustedWebMessage(
         L"[NodeViewJS security] Blocked IPC from untrusted document %ls\n",
         sender == nullptr ? L"an unknown source" : sender);
     fflush(stderr);
+  }
+  if (trusted) {
+    TraceWebView(L"accepted WebMessage from trusted document");
   }
   CoTaskMemFree(sender);
   CoTaskMemFree(current);
@@ -489,6 +565,7 @@ void WebViewHost::Initialize(
     const std::wstring& data_directory,
     bool bridge_embedded) {
   auto& state = *state_;
+  TraceWebView(L"WebView initialization started");
   state.window = window;
   state.bridge_embedded = bridge_embedded;
   const std::uint64_t initialization_id = ++state.initialization_id;
@@ -496,8 +573,10 @@ void WebViewHost::Initialize(
 
   std::wstring user_data_folder;
   try {
+    TraceWebView(L"canonicalizing entry path");
     const std::filesystem::path entry_path = std::filesystem::weakly_canonical(entry_file);
     state.content_root = entry_path.parent_path();
+    TraceWebView(L"creating entry file URL");
     const std::wstring entry_file_url = MakeFileUrl(entry_path.wstring());
     const std::size_t filename_offset = entry_file_url.find_last_of(L'/');
     if (entry_file_url.empty() || filename_offset == std::wstring::npos) {
@@ -505,6 +584,7 @@ void WebViewHost::Initialize(
       return;
     }
     entry_url = std::wstring(kAppVirtualOrigin) + entry_file_url.substr(filename_offset + 1);
+    TraceWebView(L"resolving WebView2 data directory");
     const std::filesystem::path data_path = data_directory.empty()
         ? GetDefaultWebViewDataDirectory(entry_path)
         : std::filesystem::absolute(data_directory);
@@ -512,12 +592,18 @@ void WebViewHost::Initialize(
       ReportWebViewError(state, L"Could not resolve the Local AppData directory for WebView2.");
       return;
     }
-    std::filesystem::create_directories(data_path);
+    TraceWebView(L"capturing WebView2 data directory path");
     user_data_folder = data_path.wstring();
+    TraceWebView(L"creating WebView2 data directory");
+    if (!EnsureDirectoryExists(data_path)) {
+      ReportWebViewError(state, L"Could not create NodeViewJS's WebView2 data directory.");
+      return;
+    }
   } catch (const std::filesystem::filesystem_error&) {
     ReportWebViewError(state, L"Could not create NodeViewJS's WebView2 data directory.");
     return;
   }
+  TraceWebView(L"creating WebView2 environment");
 
   const HRESULT environment_result = CreateCoreWebView2EnvironmentWithOptions(
       nullptr,
@@ -526,6 +612,7 @@ void WebViewHost::Initialize(
       Callback<ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler>(
           [this, entry_url, initialization_id](HRESULT result, ICoreWebView2Environment* environment) -> HRESULT {
             auto& state = *state_;
+            TraceWebView(L"environment creation callback", result);
             if (!IsCurrentInitialization(state, initialization_id)) {
               return S_OK;
             }
@@ -543,6 +630,7 @@ void WebViewHost::Initialize(
                 Callback<ICoreWebView2CreateCoreWebView2ControllerCompletedHandler>(
                     [this, entry_url, initialization_id](HRESULT controller_result, ICoreWebView2Controller* controller) -> HRESULT {
                       auto& state = *state_;
+                      TraceWebView(L"controller creation callback", controller_result);
                       if (!IsCurrentInitialization(state, initialization_id)) {
                         if (SUCCEEDED(controller_result) && controller != nullptr) {
                           controller->Close();
@@ -609,6 +697,7 @@ void WebViewHost::Initialize(
                             security_policy_result);
                         return security_policy_result;
                       }
+                      TraceWebView(L"security policy registered");
                       const HRESULT navigation_handler_result = state.webview->add_NavigationStarting(
                           Callback<ICoreWebView2NavigationStartingEventHandler>(
                               [this](ICoreWebView2*, ICoreWebView2NavigationStartingEventArgs* args) -> HRESULT {
@@ -645,6 +734,7 @@ void WebViewHost::Initialize(
                       const HRESULT source_changed_result = state.webview->add_SourceChanged(
                           Callback<ICoreWebView2SourceChangedEventHandler>(
                               [this](ICoreWebView2*, ICoreWebView2SourceChangedEventArgs*) -> HRESULT {
+                                TraceWebView(L"source changed");
                                 TrustCurrentTopLevelDocument(*state_);
                                 return S_OK;
                               })
@@ -662,6 +752,7 @@ void WebViewHost::Initialize(
                       const HRESULT content_loading_result = state.webview->add_ContentLoading(
                           Callback<ICoreWebView2ContentLoadingEventHandler>(
                               [this](ICoreWebView2*, ICoreWebView2ContentLoadingEventArgs*) -> HRESULT {
+                                TraceWebView(L"content loading");
                                 TrustCurrentTopLevelDocument(*state_);
                                 return S_OK;
                               })
@@ -675,6 +766,32 @@ void WebViewHost::Initialize(
                         return content_loading_result;
                       }
                       state.content_loading_handler_registered = true;
+
+                      EventRegistrationToken navigation_completed_token{};
+                      const HRESULT navigation_completed_result = state.webview->add_NavigationCompleted(
+                          Callback<ICoreWebView2NavigationCompletedEventHandler>(
+                              [](ICoreWebView2*, ICoreWebView2NavigationCompletedEventArgs* args) -> HRESULT {
+                                BOOL success = FALSE;
+                                COREWEBVIEW2_WEB_ERROR_STATUS web_error =
+                                    COREWEBVIEW2_WEB_ERROR_STATUS_UNKNOWN;
+                                args->get_IsSuccess(&success);
+                                args->get_WebErrorStatus(&web_error);
+                                TraceWebView(
+                                    success ? L"navigation completed" : L"navigation failed",
+                                    web_error);
+                                return S_OK;
+                              })
+                              .Get(),
+                          &navigation_completed_token);
+                      if (FAILED(navigation_completed_result)) {
+                        ReportWebViewError(
+                            state,
+                            L"Could not register trusted document completion tracking",
+                            navigation_completed_result);
+                        return navigation_completed_result;
+                      }
+                      state.navigation_completed_token = navigation_completed_token;
+                      state.navigation_completed_handler_registered = true;
 
                       const HRESULT message_handler_result = state.webview->add_WebMessageReceived(
                           Callback<ICoreWebView2WebMessageReceivedEventHandler>(
@@ -694,10 +811,14 @@ void WebViewHost::Initialize(
                         return message_handler_result;
                       }
                       state.web_message_handler_registered = true;
+                      TraceWebView(L"WebMessageReceived handler registered");
 
                       if (state.bridge_embedded) {
                         Resize();
-                        return state.webview->Navigate(entry_url.c_str());
+                        TraceWebView(L"navigating with embedded bridge");
+                        const HRESULT navigate_result = state.webview->Navigate(entry_url.c_str());
+                        TraceWebView(L"Navigate returned", navigate_result);
+                        return navigate_result;
                       }
 
                       const HRESULT bridge_result = state.webview->AddScriptToExecuteOnDocumentCreated(
@@ -716,7 +837,10 @@ void WebViewHost::Initialize(
                                   return script_result;
                                 }
                                 Resize();
-                                return state.webview->Navigate(entry_url.c_str());
+                                TraceWebView(L"navigating after bridge registration");
+                                const HRESULT navigate_result = state.webview->Navigate(entry_url.c_str());
+                                TraceWebView(L"Navigate returned", navigate_result);
+                                return navigate_result;
                               })
                               .Get());
                       if (FAILED(bridge_result)) {
@@ -787,6 +911,14 @@ void WebViewHost::Resize() {
 
   RECT bounds{};
   GetClientRect(state.window, &bounds);
+  if (GetEnvironmentVariableW(L"NODEVIEW_NATIVE_TRACE", nullptr, 0) != 0) {
+    fwprintf(
+        stderr,
+        L"[NodeViewJS native trace] resize WebView bounds %ldx%ld\n",
+        bounds.right - bounds.left,
+        bounds.bottom - bounds.top);
+    fflush(stderr);
+  }
   state.controller->put_Bounds(bounds);
 }
 
@@ -830,6 +962,9 @@ void WebViewHost::Close() {
       if (state.content_loading_handler_registered) {
         state.webview->remove_ContentLoading(state.content_loading_token);
       }
+      if (state.navigation_completed_handler_registered) {
+        state.webview->remove_NavigationCompleted(state.navigation_completed_token);
+      }
       if (state.web_message_handler_registered) {
         state.webview->remove_WebMessageReceived(state.web_message_token);
       }
@@ -853,6 +988,7 @@ void WebViewHost::Close() {
   state.frame_navigation_handler_registered = false;
   state.source_changed_handler_registered = false;
   state.content_loading_handler_registered = false;
+  state.navigation_completed_handler_registered = false;
   state.content_root.clear();
   state.trusted_document.clear();
   ipc_.Clear();

@@ -57,6 +57,7 @@ Windows:
 
 - Windows 10 or newer
 - Visual Studio Build Tools 2022 with the `Desktop development with C++` workload
+- Python 3 discoverable by `node-gyp`
 - Microsoft Edge WebView2 Runtime
 
 macOS development:
@@ -78,10 +79,13 @@ sudo apt-get install libgtk-3-dev libwebkit2gtk-4.1-dev pkg-config
 
 The build script downloads/stages the WebView2 SDK package into `vendor/` when needed.
 
-If `node-gyp` cannot find Python, set `PYTHON` before building:
+Portable packaging rebuilds the native launcher by default. If `node-gyp` cannot find Python,
+install Python 3 or set `PYTHON` before building:
 
 ```powershell
+winget install Python.Python.3.12
 $env:PYTHON = "C:\Path\To\Python\python.exe"
+npm run build
 ```
 
 ## Install dependencies
@@ -224,16 +228,12 @@ const app = new App({
   entry: path.join(__dirname, "index.html")
 });
 
-app.command("greet", (payload) => {
-  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
-    throw new TypeError("greet requires an object payload.");
-  }
-  const { name } = payload;
+app.command("greet", (name) => {
   if (typeof name !== "string" || name.trim() === "") {
     throw new TypeError("name must be a non-empty string.");
   }
   console.log("Greeting:", name);
-  return { message: `Hello ${name} from NodeViewJS` };
+  return `Hello ${name} from NodeViewJS`;
 });
 
 app.run();
@@ -256,10 +256,7 @@ app.run();
       const output = document.querySelector("#output");
 
       greetButton.onclick = async () => {
-        const result = await NodeViewJS.invoke("greet", {
-          name: nameInput.value
-        });
-        output.textContent = result.message;
+        output.textContent = await NodeViewJS.invoke("greet", nameInput.value);
       };
     </script>
   </body>
@@ -506,7 +503,7 @@ npm run package
 npx nodeviewjs package
 ```
 
-The bundle contains a native Mach-O launcher, bundled Node runtime, native addon, runtime JavaScript, and app assets. The DMG includes the app and an Applications shortcut. Packaging uses `nodeviewjs.appId` as `CFBundleIdentifier`, `nodeviewjs.macIcon` for an optional `.icns`, and writes backend output to `~/Library/Logs/<appId>/<AppName>.log`.
+The bundle contains a native Mach-O launcher, bundled Node runtime, native addon, runtime JavaScript, and app assets. The DMG includes the app and an Applications shortcut. Packaging uses `nodeviewjs.appId` as `CFBundleIdentifier`, `nodeviewjs.macIcon` for an optional `.icns`, and app errors use the backend log path described below.
 
 Set `NODEVIEW_MAC_SIGN_IDENTITY` to a Developer ID Application identity to sign the launcher, Node runtime, addon, and app with hardened-runtime options. Set `NODEVIEW_MAC_NOTARY_PROFILE` to a configured `notarytool` keychain profile to submit and staple the signed app before its DMG is generated. Successful macOS compile/live smoke evidence remains required before the macOS queue item is complete.
 
@@ -601,15 +598,11 @@ const app = new App({
   entry: path.join(__dirname, "index.html")
 });
 
-app.command("greet", (payload) => {
-  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
-    throw new TypeError("greet requires an object payload.");
-  }
-  const { name } = payload;
+app.command("greet", (name) => {
   if (typeof name !== "string" || name.trim() === "") {
     throw new TypeError("name must be a non-empty string.");
   }
-  return { message: `Hello ${name} from NodeViewJS` };
+  return `Hello ${name} from NodeViewJS`;
 });
 
 app.run();
@@ -638,10 +631,7 @@ Frontend:
 
   greetButton.onclick = async () => {
     try {
-      const result = await NodeViewJS.invoke("greet", {
-        name: nameInput.value
-      });
-      output.textContent = result.message;
+      output.textContent = await NodeViewJS.invoke("greet", nameInput.value);
     } catch (error) {
       console.error("Could not greet:", error);
       output.textContent = error.message;
@@ -655,6 +645,8 @@ The frontend does not need to include a bridge script. NodeViewJS provides `wind
 `NodeViewJS.invoke()` returns a promise for the value returned by the backend command. An `async` command that does not explicitly return a value resolves to `undefined`. If the command throws or rejects, `invoke()` rejects with that error. Payloads and return values must be JSON-safe values within the IPC limits described in the security section.
 
 Backend `console.log()` output appears in the terminal or backend log. Frontend `console.log()` output appears in WebView DevTools. Run `npm run dev` to use DevTools; packaged Windows apps intentionally disable them even when `devtools: true` is present in application options.
+
+`nodeviewjs dev` manages `NODEVIEW_DEVTOOLS`, `NODEVIEW_DEV_WATCH`, and `NODEVIEW_STARTUP_TIMING` internally. Packaged apps ignore inherited values for those development defaults, so launching from a development shell cannot enable file watching or timing accidentally. Set the documented `devtools` and `startupTiming` application options when configuring behavior directly; packaged Windows DevTools remain disabled.
 
 `window.NodeView` is retained as a compatibility alias. New applications should use `window.NodeViewJS`.
 
@@ -742,6 +734,14 @@ Call `app.run()` once after registering commands, plugins, and backend event han
 `appId` identifies persistent web-view data for the app and defaults to `title`. Windows profiles are stored under `%LOCALAPPDATA%\NodeViewJS\<app-id>-<hash>\WebView2`; the macOS app-support path ends in `WebKit`. Keep `appId` stable across releases so the same profile is reused. Existing `.nodeview-webview` folders are left untouched and can be removed after confirming the new profile works.
 
 Application JSON settings use the separate [Config helper](#config-helper), which stores files in the user's application-data directory by default.
+
+Backend errors are written to `app.logPath`. By default:
+
+- Windows: `%LOCALAPPDATA%\NodeViewJS\Logs\<app-id>-<hash>\backend.log`
+- macOS: `~/Library/Logs/NodeViewJS/<app-id>-<hash>/backend.log`
+- Linux: `${XDG_STATE_HOME:-~/.local/state}/nodeviewjs/<app-id>-<hash>/backend.log`
+
+Set `NODEVIEW_LOG_PATH` to override the log file during debugging or tests. Logs append across launches and rotate the previous file to `backend.log.1` when the current file exceeds the runtime size limit.
 
 ### Window options and controls
 
@@ -1101,6 +1101,18 @@ app.command("readSettings", {
 ```
 
 Every command requirement must be allowed and not denied. Permission groups and wildcard scopes are accepted only in app policies, never as command requirements.
+
+Individual windows can narrow the app-level policy. This is useful for secondary or less-trusted views:
+
+```js
+const previewWindow = app.createWindow({
+  title: "Preview",
+  entry: path.join(__dirname, "preview.html"),
+  permissions: ["fs:read:config"]
+});
+```
+
+The app policy remains the maximum permission set. A command invoked from a window must pass both the app policy and that window's policy.
 
 Command and event names must be non-empty strings. Invoking a command that the backend did not register rejects with an `Unknown command` error.
 
@@ -1478,9 +1490,11 @@ Visual Studio 2017 is not enough for newer Node versions. For example, Node.js 2
 
 ### `node-gyp` cannot find Python
 
-Set the `PYTHON` environment variable:
+Native builds and Windows packaging require Python 3 for `node-gyp`. Install Python or set the
+`PYTHON` environment variable in the shell running `npm run build` or `npm run package`:
 
 ```powershell
+winget install Python.Python.3.12
 $env:PYTHON = "C:\Path\To\Python\python.exe"
 npm run build
 ```
@@ -1498,6 +1512,8 @@ build/portable/NodeViewDemo/resources/NodeViewDemo.log
 ```
 
 The portable launcher writes Node runtime output there. If you change the package name, the log file uses the app name, for example `resources/MyApp.log`.
+
+Structured backend errors are also written under `%LOCALAPPDATA%\NodeViewJS\Logs\<app-id>-<hash>\backend.log`. Set `NODEVIEW_LOG_PATH` before launching if you want to capture that log at a known file path.
 
 ### App entry file cannot be loaded
 
@@ -1532,7 +1548,7 @@ The frontend can only call commands that the backend registers.
 
 Top-level WebView navigation is restricted to local files inside the configured `entry` file's directory. Remote URLs and local files outside that directory are blocked and logged to stderr.
 
-On Windows, the entry directory is mapped in memory to `https://app.nodeview.local/` inside that WebView instance. It does not register DNS, edit the hosts file, open a port, contact a server, or persist after the WebView closes. The mapping avoids Chromium's unique `file:` origin warnings while retaining canonical app-root checks and deny-CORS resource access.
+On Windows, the entry directory is mapped in memory to `https://app.nodeview.example/` inside that WebView instance. It does not register DNS, edit the hosts file, open a port, contact a server, or persist after the WebView closes. The mapping avoids Chromium's unique `file:` origin warnings while retaining canonical app-root checks and deny-CORS resource access.
 
 On Windows, `window.NodeViewJS` is created only in the top-level document. Native IPC also verifies that each message came from the current canonical local document under the configured app root; child frames, outside-root files, unexpected origins, and stale pages cannot invoke backend commands or emit backend events. macOS and Linux parity for this boundary is deferred.
 

@@ -14,6 +14,7 @@ function Invoke-Checked($Command, $Arguments) {
   }
 }
 
+Invoke-Checked node @((Join-Path $PSScriptRoot "check-native-prerequisites.js"))
 Invoke-Checked powershell @("-ExecutionPolicy", "Bypass", "-File", (Join-Path $PSScriptRoot "setup-webview2.ps1"))
 Invoke-Checked node @((Join-Path $PSScriptRoot "generate-bridge-header.js"))
 $resourceArguments = @((Join-Path $PSScriptRoot "generate-launcher-resource.js"))

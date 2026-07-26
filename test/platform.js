@@ -251,6 +251,10 @@ assert.match(
   /command \+= command_line/
 );
 assert.match(runtimeApp, /frameOnHover is not currently supported/);
+assert.match(
+  runtimeApp,
+  /NODEVIEW_DEV_WATCH === "1" &&\s+process\.env\.NODEVIEW_BRIDGE_EMBEDDED !== "1"/
+);
 assert.match(windowsHost, /CreateAcceleratorTableW/);
 assert.match(windowsHost, /TrackPopupMenuEx/);
 assert.match(windowsHost, /SetApplicationMenu/);

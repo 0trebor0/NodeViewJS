@@ -19,7 +19,7 @@ The Windows CI job runs the same `security:gate` command. A release must not byp
 - [ ] Compare `runtime/index.js` exports with this inventory: `App`, `AppWindow`, `clipboard`, `config`, `dialog`, `ipc`, `notification`, `shell`, and `Updater`.
 - [ ] Confirm every new backend or native capability is documented in `README.md` and assigned an explicit trust boundary in `SECURITY.md`.
 - [ ] Confirm no frontend code receives `require`, `process`, filesystem objects, native handles, arbitrary evaluation, or command execution.
-- [ ] Confirm command and plugin permission checks remain deny-first and new privileged commands declare their required permissions.
+- [ ] Confirm command, per-window, and plugin permission checks remain deny-first and new privileged commands declare their required permissions.
 
 ## Release artifacts
 

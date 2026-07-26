@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Raw WebView message probe</title>
+  </head>
+  <body>
+    <script>
+      setTimeout(() => {
+        window.chrome?.webview?.postMessage({
+          version: 1,
+          type: "event",
+          event: "raw-webmessage-ready",
+          payload: {
+            href: location.href,
+            hasNodeViewJS: typeof window.NodeViewJS !== "undefined"
+          }
+        });
+      }, 500);
+    </script>
+  </body>
+</html>

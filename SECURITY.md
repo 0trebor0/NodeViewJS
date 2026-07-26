@@ -38,7 +38,7 @@ Packaged local HTML, CSS, and JavaScript are application code, but they remain u
 
 - Raw `require()`, Node.js globals, and the native addon are not exposed to the WebView.
 - Only registered commands can be invoked from the frontend.
-- Command permission requirements are checked before handlers run; deny rules take precedence.
+- Command permission requirements are checked before handlers run; app policies are the maximum grant, per-window policies can narrow access, and deny rules take precedence.
 - Native shell execution is not exposed. External URLs and paths use constrained backend helpers.
 - Top-level navigation is restricted to local files under the configured entry directory.
 - On Windows, the bridge exists only in the top-level frame and native IPC requires the sender, current source, and active trusted document to resolve to the same canonical local file under the app root.

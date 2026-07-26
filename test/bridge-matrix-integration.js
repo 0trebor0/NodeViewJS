@@ -3,11 +3,14 @@
 const assert = require("node:assert/strict");
 const path = require("node:path");
 const { App } = require("../runtime");
+const { runWithTemporaryWebViewProfile } = require("./temporary-webview-profile");
 
 if (process.platform !== "win32") {
   console.log("Bridge parameter matrix integration test skipped outside Windows.");
   process.exit(0);
 }
+
+runWithTemporaryWebViewProfile("nodeviewjs-bridge-matrix-", 45_000);
 
 const app = new App({
   title: "NodeViewJS Bridge Matrix Test",

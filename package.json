@@ -46,6 +46,7 @@
     "test:native-lifecycle": "node test/native-lifecycle.js",
     "test:bridge": "npm run test:native-lifecycle && node test/bridge-integration.js && node test/bridge-matrix-integration.js",
     "test:bridge-matrix": "node test/bridge-matrix-integration.js",
+    "test:raw-webmessage": "node test/raw-webmessage-diagnostic.js",
     "test:ipc-security": "node test/ipc-security.js",
     "test:error-logging": "node test/error-logging.js",
     "test:ipc-security-integration": "node test/ipc-security-integration.js",

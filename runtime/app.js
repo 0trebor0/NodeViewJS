@@ -285,6 +285,11 @@ function resolveWindowOptions(options, fallback = {}, owner = "Window") {
   const menu = options.menu === undefined
     ? fallback.menu ?? null
     : normalizeMenuTemplate(options.menu, { allowNull: true });
+  const permissions = options.permissions;
+  const permissionPolicy = permissions === undefined
+    ? fallback.permissionPolicy ?? resolvePermissions({})
+    : resolvePermissions({ permissions });
+  const packaged = process.env.NODEVIEW_BRIDGE_EMBEDDED === "1";
 
   return {
     title,
@@ -306,9 +311,12 @@ function resolveWindowOptions(options, fallback = {}, owner = "Window") {
     closeToHide: options.closeToHide ?? fallback.closeToHide ?? false,
     transparent: options.transparent ?? fallback.transparent ?? false,
     windowColors: normalizeWindowColors(options.windowColors, fallback.windowColors),
-    devtools: options.devtools ?? fallback.devtools ?? process.env.NODEVIEW_DEVTOOLS === "1",
-    startupTiming: options.startupTiming ?? fallback.startupTiming ?? process.env.NODEVIEW_STARTUP_TIMING === "1",
+    devtools: options.devtools ?? fallback.devtools
+      ?? (!packaged && process.env.NODEVIEW_DEVTOOLS === "1"),
+    startupTiming: options.startupTiming ?? fallback.startupTiming
+      ?? (!packaged && process.env.NODEVIEW_STARTUP_TIMING === "1"),
     singleInstance,
+    permissionPolicy,
     menu,
     icon: icon && path.resolve(icon),
     entry: path.resolve(entry),
@@ -621,7 +629,8 @@ class AppWindow {
         if (this.options.menu) native().setApplicationMenu(id, this.options.menu);
       }
       native().loadFile(id, this.options.entry);
-      if (process.env.NODEVIEW_DEV_WATCH === "1") {
+      if (process.env.NODEVIEW_DEV_WATCH === "1" &&
+          process.env.NODEVIEW_BRIDGE_EMBEDDED !== "1") {
         this.#devWatcher = startDevWatcher(this.options.entry, () => this.reload());
       }
       if (showImmediately) native().showWindow(id);
@@ -677,20 +686,24 @@ class App {
   #mainWindow;
   #launchConfiguration;
   #singleInstance;
+  #windowPermissionPolicies = new WeakMap();
   #windows = new Set();
 
   constructor(options = {}) {
     if (!options || typeof options !== "object" || Array.isArray(options)) {
       throw new TypeError("App options must be an object.");
     }
-    this.options = resolveWindowOptions(options, {}, "App");
+    const resolvedOptions = resolveWindowOptions(options, {}, "App");
+    const { permissionPolicy, ...publicOptions } = resolvedOptions;
+    this.options = publicOptions;
+    this.#permissions = permissionPolicy;
     this.#errorLogger = createErrorLogger(this.options.appId);
     this.#launchConfiguration = resolveLaunchConfiguration(options);
     this.options.protocols = this.#launchConfiguration.protocols;
     this.options.fileAssociations = this.#launchConfiguration.fileAssociations;
     this.#mainWindow = new AppWindow(this, this.options);
+    this.#windowPermissionPolicies.set(this.#mainWindow, permissionPolicy);
     this.#windows.add(this.#mainWindow);
-    this.#permissions = resolvePermissions(options);
   }
 
   get mainWindow() {
@@ -710,7 +723,13 @@ class App {
   }
 
   createWindow(options = {}) {
-    const window = new AppWindow(this, resolveWindowOptions(options, this.options));
+    const resolvedOptions = resolveWindowOptions(options, {
+      ...this.options,
+      permissionPolicy: this.#permissions
+    });
+    const { permissionPolicy, ...publicOptions } = resolvedOptions;
+    const window = new AppWindow(this, publicOptions);
+    this.#windowPermissionPolicies.set(window, permissionPolicy);
     this.#windows.add(window);
     if (this.#hasRun) window._open(true);
     return window;
@@ -1210,6 +1229,10 @@ class App {
 
       const missingPermission = command.permissions.find(
         (permission) => !hasPermission(this.#permissions, permission)
+          || !hasPermission(
+            this.#windowPermissionPolicies.get(window) ?? this.#permissions,
+            permission
+          )
       );
       if (missingPermission) {
         throw new Error(`Permission not granted for command '${message.command}': ${missingPermission}`);

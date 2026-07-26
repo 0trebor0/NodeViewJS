@@ -7,6 +7,7 @@
 #include <uv.h>
 
 #include <cmath>
+#include <cstdio>
 #include <limits>
 #include <map>
 #include <set>
@@ -22,6 +23,12 @@ struct RuntimeState {
   bool com_initialized = false;
   bool running = false;
 };
+
+void TraceRuntime(const wchar_t* message) {
+  if (GetEnvironmentVariableW(L"NODEVIEW_NATIVE_TRACE", nullptr, 0) == 0) return;
+  fwprintf(stderr, L"[NodeViewJS native trace] %ls\n", message);
+  fflush(stderr);
+}
 
 NodeViewJSRuntime::NodeViewJSRuntime()
     : state_(std::make_unique<RuntimeState>()) {}
@@ -119,6 +126,7 @@ void NodeViewJSRuntime::Run(Napi::Env env) {
 
   state_->message_timer = timer;
   state_->running = true;
+  TraceRuntime(L"native message pump started");
 }
 
 void NodeViewJSRuntime::CloseAll() {
@@ -153,6 +161,7 @@ void NodeViewJSRuntime::PumpMessages() {
   MSG message{};
   while (PeekMessage(&message, nullptr, 0, 0, PM_REMOVE)) {
     if (message.message == WM_QUIT) {
+      TraceRuntime(L"native message pump received WM_QUIT");
       uv_stop(uv_default_loop());
       return;
     }

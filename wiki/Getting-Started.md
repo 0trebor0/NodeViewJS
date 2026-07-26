@@ -35,15 +35,11 @@ const app = new App({
   entry: path.join(__dirname, "index.html")
 });
 
-app.command("greet", (payload) => {
-  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
-    throw new TypeError("greet requires an object payload.");
-  }
-  const { name } = payload;
+app.command("greet", (name) => {
   if (typeof name !== "string" || name.trim() === "") {
     throw new TypeError("name must be a non-empty string.");
   }
-  return { message: `Hello ${name}` };
+  return `Hello ${name}`;
 });
 
 app.run();
@@ -64,8 +60,8 @@ app.run();
     <script>
       document.querySelector("#greet").addEventListener("click", async () => {
         try {
-          const result = await NodeViewJS.invoke("greet", { name: "World" });
-          document.querySelector("#output").textContent = result.message;
+          document.querySelector("#output").textContent =
+            await NodeViewJS.invoke("greet", "World");
         } catch (error) {
           document.querySelector("#output").textContent = error.message;
         }

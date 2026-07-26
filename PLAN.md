@@ -26,6 +26,12 @@
 
 The Windows implementation queues below are complete. macOS and Linux security parity remains deferred. The active release work is tracked separately so implementation status is not confused with external publishing prerequisites.
 
+### Live-Test Diagnostics
+
+| ID | Issue | Status | Evidence / next step |
+| --- | --- | --- | --- |
+| DBG-01 | Live WebView bridge tests time out inside restricted sandboxes | Resolved | `npm run test:raw-webmessage` uses an isolated temporary WebView2 profile root and opt-in native tracing. Restricted runs can create the controller but cannot complete browser navigation. With normal system access, both injected and embedded bridge paths complete navigation and deliver trusted raw WebMessages; `npm run test:bridge` passes the lifecycle, bridge, and parameter-matrix integrations. |
+
 ### Release Queue
 
 | ID | Work item | Status | Completion target |
@@ -47,7 +53,7 @@ The Windows implementation queues below are complete. macOS and Linux security p
 | ID | Work item | Status | Dependency / completion target |
 | --- | --- | --- | --- |
 | L-01 | Multi-window support | Complete | `app.createWindow()` provides independent native windows, WebViews, IPC handlers, targeted events, shared broadcasts, and lifecycle control. The two-window integration test verifies routing and teardown. |
-| L-02 | Advanced permission hardening | Complete | Backward-compatible policies support known groups, named scopes, multiple command requirements, and deny-first evaluation. Unit and live bridge tests cover allowed and denied paths. |
+| L-02 | Advanced permission hardening | Complete | Backward-compatible policies support known groups, named scopes, multiple command requirements, per-window narrowing, and deny-first evaluation. Unit and live bridge tests cover allowed and denied paths. |
 | L-03 | Embedded executable icon and Windows installer | Complete | Target-specific icon/version resources are compiled into the launcher. `npm run test:installer` verifies package, quiet install, metadata/registration, installed launch, and clean uninstall. |
 | L-04 | Auto-update support | Complete | HTTPS-only Ed25519 manifests bind app id, version, URL, size, and SHA-256. The updater rejects downgrades/tampering, stages atomically, re-verifies at handoff, waits for old processes, applies transactionally, restarts, and has focused updater plus installer rollback tests. |
 | L-05 | Plugin system | Complete | `app.use()` provides explicit backend-only plugins, namespaced commands/events, host and command permission checks, transactional setup, lifecycle cleanup, immutable metadata, and focused routing/lifecycle tests. |
@@ -117,7 +123,7 @@ macOS and Linux security-parity work is deferred for now, and each cross-platfor
 - Windows portable builds expose one root executable plus one `resources/` folder containing `app/`, `runtime/`, and the launcher-bound `integrity.manifest`; the runtime log is the only permitted unlisted resource file. Editable runtime modules are bundled into `runtime/nodeview.js`, and the native addon is staged beside it.
 - Project commands are wrapped by small scripts so setup, build, dev, clean, and packaging stay easy to run.
 - Portable packaging copies the bridge as a local external script, references it from copied HTML, and makes packaged native hosts skip document-start injection; development keeps the in-memory fallback without modifying source HTML.
-- Windows maps each app root to a private in-memory `https://app.nodeview.local/` WebView origin, avoiding `file:` unique-origin warnings without DNS, a server, persistence, or access outside the canonical app root.
+- Windows maps each app root to a private in-memory `https://app.nodeview.example/` WebView origin, avoiding `file:` unique-origin warnings without DNS, a server, persistence, or access outside the canonical app root.
 - The `nodeviewjs` CLI can create starter apps and run setup/build/start/dev/package commands, including packaging external projects from their current working directory.
 - Portable packaging reads app name and entry from the target project's `nodeviewjs` block in `package.json`.
 - Portable packaging supports `include` and `exclude` config for app assets.
@@ -302,8 +308,8 @@ const app = new App({
   entry: "index.html"
 });
 
-app.command("greet", async ({ name }) => {
-  return `Hello ${name} from Node.js`;
+app.command("greet", async (name) => {
+  return `Hello ${name || "there"} from Node.js`;
 });
 
 app.run();
@@ -318,9 +324,7 @@ Frontend code:
 
 <script>
   btn.onclick = async () => {
-    const message = await NodeViewJS.invoke("greet", {
-      name: name.value
-    });
+    const message = await NodeViewJS.invoke("greet", name.value);
 
     output.textContent = message;
   };
@@ -383,9 +387,7 @@ This object should be provided by the runtime automatically. App pages should no
 ### Invoke backend command
 
 ```js
-const result = await NodeViewJS.invoke("greet", {
-  name: "Robert"
-});
+const result = await NodeViewJS.invoke("greet", "Robert");
 ```
 
 ### Listen for backend event
@@ -640,9 +642,7 @@ Allow frontend JavaScript to communicate with Node through a native WebView-prov
 The frontend should call:
 
 ```js
-NodeViewJS.invoke("greet", {
-  name: "Robert"
-});
+NodeViewJS.invoke("greet", "Robert");
 ```
 
 The frontend should not need to import, inject, or include a bridge file.
@@ -664,9 +664,7 @@ Success criteria:
 Frontend:
 
 ```js
-NodeViewJS.invoke("greet", {
-  name: "Robert"
-}).then(function (message) {
+NodeViewJS.invoke("greet", "Robert").then(function (message) {
   console.log(message);
 });
 ```
@@ -674,8 +672,8 @@ NodeViewJS.invoke("greet", {
 Backend:
 
 ```js
-app.command("greet", function (payload) {
-  return "Hello " + payload.name;
+app.command("greet", function (name) {
+  return "Hello " + (name || "there");
 });
 ```
 
@@ -867,8 +865,8 @@ const app = new App({
   entry: "index.html"
 });
 
-app.command("greet", async ({ name }) => {
-  return `Hello ${name} from NodeViewJS`;
+app.command("greet", async (name) => {
+  return `Hello ${name || "there"} from NodeViewJS`;
 });
 
 app.run();
@@ -883,9 +881,7 @@ Frontend:
 
 <script>
   btn.onclick = function () {
-    NodeViewJS.invoke("greet", {
-      name: name.value
-    }).then(function (result) {
+    NodeViewJS.invoke("greet", name.value).then(function (result) {
       out.textContent = result;
     });
   };
@@ -1166,8 +1162,8 @@ const app = new App({
   entry: "index.html"
 });
 
-app.command("greet", function (payload) {
-  return "Hello " + payload.name;
+app.command("greet", function (name) {
+  return "Hello " + (name || "there");
 });
 
 app.run();
@@ -1176,9 +1172,7 @@ app.run();
 Preferred frontend style:
 
 ```js
-NodeViewJS.invoke("greet", {
-  name: "Robert"
-}).then(function (message) {
+NodeViewJS.invoke("greet", "Robert").then(function (message) {
   console.log(message);
 });
 ```

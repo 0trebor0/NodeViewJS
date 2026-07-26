@@ -38,6 +38,18 @@ app.command("config:read", {
 
 Deny rules take precedence. Permissions control command admission; handlers must still validate application-specific semantics.
 
+Window options can include `permissions` to narrow the app policy for that window:
+
+```js
+app.createWindow({
+  title: "Preview",
+  entry: "preview.html",
+  permissions: ["fs:read:config"]
+});
+```
+
+The app policy remains the maximum permission set. A command invoked from a window must satisfy both policies.
+
 ## Windows
 
 `AppWindow` instances support show, hide, close, reload, minimize, maximize, restore, fullscreen, title, size, position, drag, menus, taskbar state, notifications, tray integration, and state inspection.

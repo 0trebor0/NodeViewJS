@@ -43,13 +43,37 @@ assert.deepEqual(Object.keys(runtime).sort(), [
 
 const app = new App({ entry: __filename });
 const previousDevTools = process.env.NODEVIEW_DEVTOOLS;
+const previousStartupTiming = process.env.NODEVIEW_STARTUP_TIMING;
+const previousBridgeEmbedded = process.env.NODEVIEW_BRIDGE_EMBEDDED;
 process.env.NODEVIEW_DEVTOOLS = "1";
 const devToolsEnvironmentApp = new App({ entry: __filename });
 const explicitlyDisabledDevToolsApp = new App({ entry: __filename, devtools: false });
+process.env.NODEVIEW_STARTUP_TIMING = "1";
+process.env.NODEVIEW_BRIDGE_EMBEDDED = "1";
+const packagedEnvironmentApp = new App({ entry: __filename });
+const explicitPackagedDevelopmentApp = new App({
+  entry: __filename,
+  devtools: true,
+  startupTiming: true
+});
 if (previousDevTools === undefined) delete process.env.NODEVIEW_DEVTOOLS;
 else process.env.NODEVIEW_DEVTOOLS = previousDevTools;
+if (previousStartupTiming === undefined) delete process.env.NODEVIEW_STARTUP_TIMING;
+else process.env.NODEVIEW_STARTUP_TIMING = previousStartupTiming;
+if (previousBridgeEmbedded === undefined) delete process.env.NODEVIEW_BRIDGE_EMBEDDED;
+else process.env.NODEVIEW_BRIDGE_EMBEDDED = previousBridgeEmbedded;
 const permittedApp = new App({ entry: __filename, permissions: ["fs:read"] });
 const ipcErrorApp = new App({ entry: __filename });
+let permissionReads = 0;
+const accessorOptions = { entry: __filename };
+Object.defineProperty(accessorOptions, "permissions", {
+  get() {
+    permissionReads += 1;
+    return ["fs:read"];
+  }
+});
+new App(accessorOptions);
+assert.equal(permissionReads, 1);
 const windowOptionsApp = new App({
   entry: __filename,
   center: true,
@@ -126,6 +150,10 @@ assert.throws(
 
 assert.equal(devToolsEnvironmentApp.options.devtools, true);
 assert.equal(explicitlyDisabledDevToolsApp.options.devtools, false);
+assert.equal(packagedEnvironmentApp.options.devtools, false);
+assert.equal(packagedEnvironmentApp.options.startupTiming, false);
+assert.equal(explicitPackagedDevelopmentApp.options.devtools, true);
+assert.equal(explicitPackagedDevelopmentApp.options.startupTiming, true);
 assert.equal(app.command("plain", () => "ok"), app);
 const hostileCommandError = {
   toString() {
@@ -731,6 +759,100 @@ async function testIpcCommandErrorDetail() {
   }]);
 }
 
+async function testWindowPermissionPolicy() {
+  const windowPolicyApp = new App({
+    entry: __filename,
+    permissions: ["fs:read", "fs:write"]
+  });
+  windowPolicyApp.command("windowRead", { permission: "fs:read" }, () => "read");
+  windowPolicyApp.command("windowWrite", { permission: "fs:write" }, () => "write");
+  const limitedWindow = windowPolicyApp.createWindow({
+    title: "Limited",
+    permissions: ["fs:read"]
+  });
+  const responses = [];
+  limitedWindow._post = (message) => responses.push(JSON.parse(message));
+  assert.equal(Object.hasOwn(limitedWindow.options, "permissionPolicy"), false);
+
+  await windowPolicyApp._handleWindowMessage(
+    limitedWindow,
+    runtime.ipc.serialize({
+      version: 1,
+      type: "invoke",
+      id: 101,
+      command: "windowRead"
+    })
+  );
+  await windowPolicyApp._handleWindowMessage(
+    limitedWindow,
+    runtime.ipc.serialize({
+      version: 1,
+      type: "invoke",
+      id: 102,
+      command: "windowWrite"
+    })
+  );
+  limitedWindow.options.permissionPolicy = {
+    allow: new Set(["fs:write"]),
+    deny: new Set()
+  };
+  await windowPolicyApp._handleWindowMessage(
+    limitedWindow,
+    runtime.ipc.serialize({
+      version: 1,
+      type: "invoke",
+      id: 104,
+      command: "windowWrite"
+    })
+  );
+
+  assert.deepEqual(responses, [
+    { version: 1, type: "response", id: 101, ok: true, result: "read" },
+    {
+      version: 1,
+      type: "response",
+      id: 102,
+      ok: false,
+      error: "Permission not granted for command 'windowWrite': fs:write"
+    },
+    {
+      version: 1,
+      type: "response",
+      id: 104,
+      ok: false,
+      error: "Permission not granted for command 'windowWrite': fs:write"
+    }
+  ]);
+
+  const maximumPolicyApp = new App({
+    entry: __filename,
+    permissions: ["fs:read"]
+  });
+  maximumPolicyApp.command("write", { permission: "fs:write" }, () => "write");
+  const broaderWindow = maximumPolicyApp.createWindow({
+    title: "Broader",
+    permissions: ["fs:write"]
+  });
+  const broaderResponses = [];
+  broaderWindow._post = (message) => broaderResponses.push(JSON.parse(message));
+  await maximumPolicyApp._handleWindowMessage(
+    broaderWindow,
+    runtime.ipc.serialize({
+      version: 1,
+      type: "invoke",
+      id: 103,
+      command: "write"
+    })
+  );
+  assert.deepEqual(broaderResponses, [{
+    version: 1,
+    type: "response",
+    id: 103,
+    ok: false,
+    error: "Permission not granted for command 'write': fs:write"
+  }]);
+}
+
 async function testBridgeLifecycleMessages() {
   const lifecycle = [];
   const window = {
@@ -753,6 +875,7 @@ Promise.all([
   testConfig(),
   testDevWatcher(),
   testIpcCommandErrorDetail(),
+  testWindowPermissionPolicy(),
   testBridgeLifecycleMessages()
 ])
   .then(() => console.log("Runtime API test passed."))

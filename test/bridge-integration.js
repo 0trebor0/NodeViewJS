@@ -5,6 +5,9 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 const { App } = require("../runtime");
+const { runWithTemporaryWebViewProfile } = require("./temporary-webview-profile");
+
+runWithTemporaryWebViewProfile("nodeviewjs-bridge-", 30_000);
 
 const app = new App({
   title: "NodeViewJS Bridge Test",
@@ -161,7 +164,7 @@ app.once("bridge-test-result", ({
     process.exit(1);
   }
   const expectedEntrySuffix = process.platform === "win32"
-    ? "https://app.nodeview.local/bridge.html"
+    ? "https://app.nodeview.example/bridge.html"
     : "/fixtures/bridge.html";
   if (!String(remoteNavigationUrl).endsWith(expectedEntrySuffix)) {
     console.error(`WebView accepted a remote top-level navigation: ${remoteNavigationUrl}`);

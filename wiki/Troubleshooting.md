@@ -2,9 +2,11 @@
 
 ## `node-gyp` cannot find Python
 
-Install Python 3 and point npm to it for the current shell:
+Native builds and Windows packaging require Python 3 for `node-gyp`. Install Python 3 and point npm
+to it for the current shell if it is not found automatically:
 
 ```powershell
+winget install Python.Python.3.12
 $env:PYTHON = "C:\Path\To\Python\python.exe"
 npm run build
 ```
@@ -16,6 +18,17 @@ Install Visual Studio 2022 Build Tools with Desktop development with C++, the Wi
 ## WebView2 controller error `0x800700aa`
 
 The WebView profile is busy. Close another instance using the same `appId`, or run tests with an isolated `LOCALAPPDATA` directory. Do not terminate unrelated WebView2 processes indiscriminately.
+
+## A Windows app opens blank
+
+Run the app once with native tracing enabled to print WebView2 initialization, navigation, and message-bridge diagnostics without showing blocking native error dialogs:
+
+```powershell
+$env:NODEVIEW_NATIVE_TRACE = "1"
+npm run dev
+```
+
+Unset `NODEVIEW_NATIVE_TRACE` after debugging to restore normal native error dialogs.
 
 ## `devtools: true` does nothing in a package
 
@@ -42,6 +55,14 @@ app.command("example", async () => {
 ## Frontend logs are not visible
 
 Frontend logs require development WebView DevTools. Backend logs appear in the terminal or application backend log.
+
+Default backend log paths:
+
+- Windows: `%LOCALAPPDATA%\NodeViewJS\Logs\<app-id>-<hash>\backend.log`
+- macOS: `~/Library/Logs/NodeViewJS/<app-id>-<hash>/backend.log`
+- Linux: `${XDG_STATE_HOME:-~/.local/state}/nodeviewjs/<app-id>-<hash>/backend.log`
+
+Set `NODEVIEW_LOG_PATH` before launching to write the backend log to a known file.
 
 ## Installer appears to hang
 
