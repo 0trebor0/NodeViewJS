@@ -14,6 +14,7 @@ $appId = if ($config.appId) { [string]$config.appId } else { [string]$packageJso
 $version = if ($metadata.version) { [string]$metadata.version } else { [string]$packageJson.version }
 $registryId = ($appName -replace '[^a-zA-Z0-9._-]', '_')
 $setup = Join-Path $root "build\installer\$appName-$version-setup.exe"
+$portableRoot = Join-Path $root "build\portable\$appName"
 $installRoot = Join-Path $env:LOCALAPPDATA "Programs\$registryId"
 $installedExe = Join-Path $installRoot "$appName.exe"
 $shortcut = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\$appName.lnk"
@@ -32,6 +33,12 @@ if ((Test-Path $installRoot) -or (Test-Path $shortcut) -or (Test-Path $registry)
 & powershell -ExecutionPolicy Bypass -File (Join-Path $runtimeRoot "scripts\package-installer.ps1") -ProjectRoot $root -KeepStaging
 if ($LASTEXITCODE -ne 0) {
   throw "Installer packaging failed before the smoke test."
+}
+if (Test-Path -LiteralPath $portableRoot) {
+  throw "Installer packaging left its temporary portable payload in the build directory."
+}
+if (Get-ChildItem -LiteralPath (Split-Path $setup -Parent) -Filter "RCX*.tmp" -File -ErrorAction SilentlyContinue) {
+  throw "Installer packaging left temporary IExpress files in the build directory."
 }
 
 $setupProcess = Start-Process -FilePath $setup -ArgumentList "/Q:A", "/R:N" -PassThru -Wait

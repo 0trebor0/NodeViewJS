@@ -348,5 +348,13 @@ Invoke-CodeSigning $output
 if (!$KeepStaging) {
   Remove-Item -LiteralPath $staging -Recurse -Force
 }
+Remove-Item -LiteralPath $portableRoot -Recurse -Force
+$portableParent = Split-Path $portableRoot -Parent
+if ((Test-Path -LiteralPath $portableParent) -and
+    @(Get-ChildItem -LiteralPath $portableParent -Force).Count -eq 0) {
+  Remove-Item -LiteralPath $portableParent -Force
+}
+Get-ChildItem -LiteralPath $installerRoot -Filter "RCX*.tmp" -File -ErrorAction SilentlyContinue |
+  Remove-Item -Force -ErrorAction SilentlyContinue
 Write-Host "Created installer: $output"
 exit 0

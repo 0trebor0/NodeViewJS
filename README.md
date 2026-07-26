@@ -527,7 +527,9 @@ npm run package:installer
 npx nodeviewjs installer
 ```
 
-The installer is written to `build/installer/<AppName>-<version>-setup.exe`. It installs for the current user under `%LOCALAPPDATA%\Programs\<AppName>`, creates a Start Menu shortcut, registers configured custom protocols and file types, and registers an uninstaller in Windows Installed Apps. Administrator access is not required. Association registration refuses to replace a protocol or app-specific file handler owned by another application, and uninstallation removes only registrations still owned by the installed executable.
+The installer is written to `build/installer/<AppName>-<version>-setup.exe`. Once the installer is complete, its temporary portable payload and IExpress temporary files are removed; the final setup executable remains. Reusable native development files in `build/nodeview` are kept because `start`, `dev`, and later packages still need them.
+
+The installer installs for the current user under `%LOCALAPPDATA%\Programs\<AppName>`, creates a Start Menu shortcut, registers configured custom protocols and file types, and registers an uninstaller in Windows Installed Apps. Administrator access is not required. Association registration refuses to replace a protocol or app-specific file handler owned by another application, and uninstallation removes only registrations still owned by the installed executable.
 
 ### Windows code signing
 
