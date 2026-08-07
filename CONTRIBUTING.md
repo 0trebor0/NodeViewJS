@@ -25,7 +25,9 @@ version, and whether the test ran in a graphical desktop session.
 2. Install dependencies with `npm ci`.
 3. Make the smallest change needed for the issue.
 4. Add or update focused tests when behavior changes.
-5. Run `npm test` and the relevant native integration tests.
+5. Run `npm test` and the relevant native integration tests. On Windows,
+   `npm run test:full` runs the default suite plus every native and WebView
+   integration in one pass.
 6. Document anything that could not be tested on your machine.
 
 Do not commit generated build output, application data, logs, dependency

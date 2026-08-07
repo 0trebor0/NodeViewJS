@@ -52,6 +52,10 @@
 * Do not rewrite, reset, rebase, or otherwise change git history.
 * Do not discard existing user changes.
 * Do not modify generated files unless the task specifically requires regeneration.
+* Never add Co-Authored-By or any AI attribution lines
+* Never add Claude attribution to PR descriptions
+* Commit message format: [type]: [description]
+
 
 ### Final Response Requirements
 

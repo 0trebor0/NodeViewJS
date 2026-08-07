@@ -1,5 +1,13 @@
 # Testing
 
+## Everything
+
+```powershell
+npm run test:full
+```
+
+This chains `npm test`, `npm run test:native`, and `npm run test:native-ui`. It is Windows-only because the native UI suites are PowerShell. Run it from an interactive desktop session.
+
 ## Default suite
 
 ```powershell
@@ -24,6 +32,8 @@ npm run test:webview-capabilities
 npm run test:multi-window
 ```
 
+`npm run test:native` runs the bridge suite plus the raw WebMessage diagnostic and every integration listed above in one pass.
+
 ## Native Windows features
 
 ```powershell
@@ -32,6 +42,8 @@ npm run test:tray-menu-native
 npm run test:taskbar-native
 npm run test:notification-native
 ```
+
+`npm run test:native-ui` runs all four.
 
 ## Security and installer
 
