@@ -29,7 +29,11 @@ function normalizeNotificationOptions(options = {}) {
 }
 
 function show(options = {}) {
-  native().showNotification(normalizeNotificationOptions(options));
+  // Validate before touching the native addon: `native()` would otherwise be
+  // evaluated first and mask an invalid-argument error with a load failure on
+  // machines where the addon has not been built.
+  const normalized = normalizeNotificationOptions(options);
+  native().showNotification(normalized);
 }
 
 module.exports = { normalizeNotificationOptions, show };
