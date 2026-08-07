@@ -55,6 +55,12 @@ The gate includes repository scanning, production dependency audit, MSVC securit
 
 Run GUI/native tests from an interactive desktop session. Restricted or headless shells can prevent WebView2 windows from initializing or delivering messages.
 
+## What CI covers
+
+The Windows CI job runs `npm test`, `npm run security:gate`, `npm run test:native-lifecycle`, and `npm pack --dry-run`. It does not run `test:native` or `test:native-ui`: a GitHub runner can create a WebView2 controller but cannot complete browser navigation, so those suites time out there rather than reporting a real defect (PLAN.md DBG-01).
+
+Live bridge, WebView capability, multi-window, and native UI coverage is therefore a local gate. Run `npm run test:full` from an interactive desktop session before a release.
+
 ## macOS and Linux volunteers
 
 The repository's [macOS and Linux test plan](../PLATFORM-TESTING.md) defines the

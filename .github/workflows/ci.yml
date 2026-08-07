@@ -38,10 +38,12 @@ jobs:
         run: npm test
       - name: Run release security gate
         run: npm run security:gate
-      - name: Run native bridge and WebView integrations
-        run: npm run test:native
-      - name: Run native UI integrations
-        run: npm run test:native-ui
+      # The runner can create a WebView2 controller but cannot complete browser
+      # navigation, so the suites that drive a live page (test:native) and the
+      # ones that need an interactive desktop (test:native-ui) are not run here.
+      # See PLAN.md DBG-01. Run `npm run test:full` locally before a release.
+      - name: Run native lifecycle test
+        run: npm run test:native-lifecycle
       - name: Preview npm package
         run: npm pack --dry-run
 
