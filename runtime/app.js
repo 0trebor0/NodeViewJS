@@ -328,6 +328,7 @@ function resolveWindowOptions(options, fallback = {}, owner = "Window") {
 class AppWindow {
   #app;
   #bridgeReady = false;
+  #closed = false;
   #devWatcher;
   #eventHandlers = new Map();
   #id;
@@ -345,6 +346,12 @@ class AppWindow {
 
   get isOpen() {
     return this.#id !== undefined;
+  }
+
+  // True only after close(); a window that has not been opened yet is not closed,
+  // so it still buffers events emitted before run().
+  get isClosed() {
+    return this.#closed;
   }
 
   on(eventName, handler) {
@@ -389,6 +396,11 @@ class AppWindow {
     if (typeof eventName !== "string" || eventName.length === 0) {
       throw new TypeError("Event name must be a non-empty string.");
     }
+    // A closed window can never flush its readiness buffer, so queueing here
+    // would grow memory and only surface as a buffer-limit error much later.
+    if (this.#closed) {
+      throw new Error("Window has been closed.");
+    }
     const message = ipc.serialize(ipc.createEventMessage(eventName, payload));
     if (this.#bridgeReady) this._post(message);
     else {
@@ -423,6 +435,7 @@ class AppWindow {
     this.#bridgeReady = false;
     this.#pendingMessages = [];
     this.#pendingMessageBytes = 0;
+    this.#closed = true;
     return this;
   }
 
@@ -588,6 +601,7 @@ class AppWindow {
     if (!fs.existsSync(this.options.entry)) {
       throw new Error(`Window entry file was not found: ${this.options.entry}`);
     }
+    this.#closed = false;
 
     const id = native().createWindow({
       title: this.options.title,
@@ -944,7 +958,13 @@ class App {
       throw new TypeError("Event name must be a non-empty string.");
     }
 
-    for (const window of this.#windows) window.emit(eventName, payload);
+    // A broadcast addresses whichever windows are live, so closed ones are
+    // skipped rather than treated as an error. AppWindow.emit() throws for a
+    // closed window because that call names one specific dead target.
+    for (const window of this.#windows) {
+      if (window.isClosed) continue;
+      window.emit(eventName, payload);
+    }
     return this;
   }
 

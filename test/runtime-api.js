@@ -871,6 +871,48 @@ async function testBridgeLifecycleMessages() {
   assert.deepEqual(lifecycle, ["loading", "ready"]);
 }
 
+{
+  // app.emit() must not broadcast into a closed window. A closed window can
+  // never flush its readiness buffer, so buffering there grows memory until
+  // emit() throws for every window, including the live ones.
+  const closingApp = new App({ entry: __filename });
+  const closingWindow = closingApp.createWindow({ title: "Closing" });
+
+  // A window that has not been opened yet is not closed: it must still buffer
+  // events emitted before run().
+  assert.equal(closingWindow.isClosed, false);
+  assert.equal(closingApp.mainWindow.isClosed, false);
+  assert.equal(closingWindow.emit("buffered-before-run", { ok: true }), closingWindow);
+
+  assert.equal(closingWindow.close(), closingWindow);
+  assert.equal(closingWindow.isOpen, false);
+  assert.equal(closingWindow.isClosed, true);
+
+  // Closed windows stay listed so a failed run() can reopen them on retry.
+  assert.deepEqual(closingApp.windows, [closingApp.mainWindow, closingWindow]);
+
+  // Naming one dead window fails fast instead of buffering forever.
+  assert.throws(() => closingWindow.emit("dead"), /Window has been closed/);
+
+  // A broadcast addresses the live windows and skips closed ones silently.
+  let closedDeliveries = 0;
+  let liveDeliveries = 0;
+  const liveEmit = closingApp.mainWindow.emit.bind(closingApp.mainWindow);
+  closingWindow.emit = () => { closedDeliveries += 1; };
+  closingApp.mainWindow.emit = (...args) => { liveDeliveries += 1; return liveEmit(...args); };
+
+  assert.equal(closingApp.emit("broadcast", { ok: true }), closingApp);
+  assert.equal(closedDeliveries, 0, "app.emit() delivered into a closed window");
+  assert.equal(liveDeliveries, 1, "app.emit() skipped a live window");
+
+  delete closingWindow.emit;
+  delete closingApp.mainWindow.emit;
+
+  // Closing twice must stay harmless.
+  assert.equal(closingWindow.close(), closingWindow);
+  assert.equal(closingWindow.isClosed, true);
+}
+
 Promise.all([
   testConfig(),
   testDevWatcher(),
