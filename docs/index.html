@@ -1,0 +1,1757 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NodeViewJS — Guide</title>
+<meta name="description" content="Complete guide to NodeViewJS: a lightweight Node.js desktop runtime built on the system web view. Setup, CLI, bridge API, backend API, packaging, updates, and security.">
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #ffffff;
+    --bg-soft: #f7f8fa;
+    --fg: #16191d;
+    --muted: #5b646f;
+    --border: #e2e6ea;
+    --accent: #1d4ed8;
+    --accent-soft: #eff4ff;
+    --code-bg: #f6f8fa;
+    --code-fg: #16191d;
+    --kw: #8250df;
+    --str: #0a7c42;
+    --com: #6a737d;
+    --warn-bg: #fff8e6;
+    --warn-border: #e0b34a;
+    --note-bg: #eef4ff;
+    --note-border: #7ea2e8;
+    --shadow: 0 1px 2px rgba(16, 24, 40, .06), 0 4px 12px rgba(16, 24, 40, .05);
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0e1116;
+      --bg-soft: #12161c;
+      --fg: #e5e9ef;
+      --muted: #98a2b0;
+      --border: #232a33;
+      --accent: #7aa2f7;
+      --accent-soft: #16202f;
+      --code-bg: #161b22;
+      --code-fg: #e5e9ef;
+      --kw: #c397e8;
+      --str: #7ee0a8;
+      --com: #7d8894;
+      --warn-bg: #241d0c;
+      --warn-border: #8a6b1f;
+      --note-bg: #111c2c;
+      --note-border: #2f5591;
+      --shadow: 0 1px 2px rgba(0,0,0,.4), 0 4px 14px rgba(0,0,0,.3);
+    }
+  }
+  :root[data-theme="light"] {
+    color-scheme: light;
+    --bg: #ffffff; --bg-soft: #f7f8fa; --fg: #16191d; --muted: #5b646f;
+    --border: #e2e6ea; --accent: #1d4ed8; --accent-soft: #eff4ff;
+    --code-bg: #f6f8fa; --code-fg: #16191d; --kw: #8250df; --str: #0a7c42; --com: #6a737d;
+    --warn-bg: #fff8e6; --warn-border: #e0b34a; --note-bg: #eef4ff; --note-border: #7ea2e8;
+    --shadow: 0 1px 2px rgba(16,24,40,.06), 0 4px 12px rgba(16,24,40,.05);
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #0e1116; --bg-soft: #12161c; --fg: #e5e9ef; --muted: #98a2b0;
+    --border: #232a33; --accent: #7aa2f7; --accent-soft: #16202f;
+    --code-bg: #161b22; --code-fg: #e5e9ef; --kw: #c397e8; --str: #7ee0a8; --com: #7d8894;
+    --warn-bg: #241d0c; --warn-border: #8a6b1f; --note-bg: #111c2c; --note-border: #2f5591;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 4px 14px rgba(0,0,0,.3);
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; scroll-padding-top: 1.5rem; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font: 400 16px/1.65 var(--sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  /* ---------- layout ---------- */
+  .shell { display: grid; grid-template-columns: 288px minmax(0, 1fr); gap: 0; }
+  .sidebar {
+    position: sticky; top: 0; align-self: start;
+    height: 100vh; overflow-y: auto;
+    border-right: 1px solid var(--border);
+    background: var(--bg-soft);
+    padding: 1.5rem 1rem 3rem;
+  }
+  .main { min-width: 0; padding: 2.5rem clamp(1rem, 4vw, 3.5rem) 6rem; }
+  .content { max-width: 60rem; margin: 0 auto; min-width: 0; overflow-wrap: break-word; }
+
+  /* ---------- sidebar ---------- */
+  .brand { display: flex; align-items: center; gap: .6rem; margin-bottom: .35rem; }
+  .brand-mark {
+    width: 30px; height: 30px; border-radius: 8px; flex: none;
+    background: linear-gradient(135deg, var(--accent), #22c3a6);
+    display: grid; place-items: center; color: #fff; font-weight: 700; font-size: 14px;
+  }
+  .brand-name { font-weight: 700; font-size: 1.05rem; letter-spacing: -.01em; }
+  .brand-sub { color: var(--muted); font-size: .8rem; margin: 0 0 1rem; }
+  #navsearch {
+    width: 100%; padding: .5rem .65rem; margin-bottom: .9rem;
+    border: 1px solid var(--border); border-radius: 8px;
+    background: var(--bg); color: var(--fg); font: inherit; font-size: .875rem;
+  }
+  #navsearch:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  #toc { list-style: none; margin: 0; padding: 0; font-size: .875rem; }
+  #toc li { margin: 0; }
+  #toc a {
+    display: block; padding: .28rem .55rem; border-radius: 6px;
+    color: var(--muted); border-left: 2px solid transparent;
+  }
+  #toc a:hover { background: var(--accent-soft); color: var(--fg); text-decoration: none; }
+  #toc a.lvl3 { padding-left: 1.5rem; font-size: .83rem; }
+  #toc a.active { color: var(--accent); background: var(--accent-soft); border-left-color: var(--accent); font-weight: 600; }
+  #toc .toc-hidden { display: none; }
+
+  .side-foot { margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border); font-size: .8rem; color: var(--muted); }
+  .side-foot a { display: block; padding: .15rem 0; }
+
+  /* ---------- topbar (mobile) ---------- */
+  .topbar {
+    display: none; position: sticky; top: 0; z-index: 30;
+    align-items: center; gap: .75rem;
+    padding: .6rem 1rem; border-bottom: 1px solid var(--border); background: var(--bg);
+  }
+  .iconbtn {
+    border: 1px solid var(--border); background: var(--bg); color: var(--fg);
+    border-radius: 8px; padding: .35rem .6rem; cursor: pointer; font: inherit; font-size: .85rem;
+  }
+  .iconbtn:hover { background: var(--accent-soft); }
+  #themetoggle { position: fixed; top: 1rem; right: 1.25rem; z-index: 40; }
+
+  /* ---------- typography ---------- */
+  h1, h2, h3, h4 { line-height: 1.25; letter-spacing: -.015em; scroll-margin-top: 1.5rem; }
+  h1 { font-size: clamp(1.9rem, 4vw, 2.6rem); margin: 0 0 .5rem; }
+  h2 {
+    font-size: 1.55rem; margin: 3.5rem 0 1rem;
+    padding-bottom: .4rem; border-bottom: 1px solid var(--border);
+  }
+  h3 { font-size: 1.15rem; margin: 2.25rem 0 .6rem; }
+  h4 { font-size: 1rem; margin: 1.5rem 0 .4rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; font-size: .8rem; }
+  p { margin: 0 0 1rem; }
+  ul, ol { margin: 0 0 1rem; padding-left: 1.4rem; }
+  li { margin: .25rem 0; }
+  hr { border: 0; border-top: 1px solid var(--border); margin: 2.5rem 0; }
+
+  /* ---------- hero ---------- */
+  .hero { padding-bottom: .5rem; }
+  .lede { font-size: 1.12rem; color: var(--muted); max-width: 50rem; }
+  .badges { display: flex; flex-wrap: wrap; gap: .45rem; margin: 1rem 0 1.5rem; }
+  .badge {
+    font-size: .75rem; font-weight: 600; padding: .25rem .6rem; border-radius: 999px;
+    border: 1px solid var(--border); background: var(--bg-soft); color: var(--muted);
+  }
+  .badge.ok { border-color: #2f9e63; color: #2f9e63; background: transparent; }
+  .badge.wip { border-color: var(--warn-border); color: var(--warn-border); background: transparent; }
+
+  /* ---------- code ---------- */
+  .codewrap { position: relative; margin: 0 0 1.25rem; }
+  pre {
+    margin: 0; padding: .95rem 1rem; overflow-x: auto;
+    background: var(--code-bg); color: var(--code-fg);
+    border: 1px solid var(--border); border-radius: 10px;
+    font: 400 13.5px/1.6 var(--mono);
+  }
+  code { font-family: var(--mono); font-size: .89em; }
+  :not(pre) > code {
+    background: var(--code-bg); border: 1px solid var(--border);
+    padding: .1em .38em; border-radius: 5px; overflow-wrap: anywhere;
+  }
+  .copybtn {
+    position: absolute; top: .45rem; right: .45rem; opacity: 0;
+    border: 1px solid var(--border); background: var(--bg); color: var(--muted);
+    border-radius: 6px; padding: .2rem .5rem; font: 600 11px/1.6 var(--sans);
+    cursor: pointer; transition: opacity .12s ease;
+  }
+  .codewrap:hover .copybtn, .copybtn:focus { opacity: 1; }
+  .copybtn:hover { color: var(--accent); border-color: var(--accent); }
+  .lang {
+    position: absolute; bottom: .4rem; right: .6rem;
+    font: 600 10px/1 var(--sans); letter-spacing: .06em; text-transform: uppercase;
+    color: var(--muted); opacity: .55; pointer-events: none;
+  }
+
+  /* ---------- tables ---------- */
+  .tablewrap { overflow-x: auto; margin: 0 0 1.25rem; border: 1px solid var(--border); border-radius: 10px; }
+  table { border-collapse: collapse; width: 100%; font-size: .9rem; }
+  th, td { text-align: left; padding: .6rem .8rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { background: var(--bg-soft); font-weight: 600; white-space: nowrap; }
+  tr:last-child td { border-bottom: 0; }
+  td code { white-space: nowrap; }
+
+  /* ---------- callouts ---------- */
+  .note, .warn {
+    border-left: 3px solid var(--note-border); background: var(--note-bg);
+    padding: .8rem 1rem; border-radius: 0 8px 8px 0; margin: 0 0 1.25rem;
+  }
+  .warn { border-left-color: var(--warn-border); background: var(--warn-bg); }
+  .note p:last-child, .warn p:last-child { margin-bottom: 0; }
+  .note strong, .warn strong { display: block; margin-bottom: .2rem; font-size: .85rem; text-transform: uppercase; letter-spacing: .04em; }
+
+  /* ---------- cards ---------- */
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: .85rem; margin: 0 0 1.5rem; }
+  .card {
+    border: 1px solid var(--border); border-radius: 10px; padding: .95rem 1rem;
+    background: var(--bg-soft); box-shadow: var(--shadow);
+  }
+  .card h4 { margin: 0 0 .35rem; color: var(--fg); text-transform: none; letter-spacing: -.01em; font-size: .95rem; font-weight: 650; }
+  .card p { margin: 0; font-size: .875rem; color: var(--muted); }
+
+  .platforms { display: flex; gap: .4rem; flex-wrap: wrap; margin: -.5rem 0 1rem; }
+  .plat { font: 600 .7rem/1 var(--sans); letter-spacing: .04em; text-transform: uppercase;
+          padding: .28rem .5rem; border-radius: 5px; border: 1px solid var(--border); color: var(--muted); }
+  .plat.win { border-color: var(--accent); color: var(--accent); }
+
+  @media (max-width: 900px) {
+    .shell { grid-template-columns: 1fr; }
+    .topbar { display: flex; }
+    .sidebar {
+      position: fixed; inset: 0 auto 0 0; z-index: 50; width: 280px;
+      transform: translateX(-100%); transition: transform .18s ease;
+      box-shadow: var(--shadow);
+    }
+    .sidebar.open { transform: none; }
+    #themetoggle { position: static; }
+    .main { padding-top: 1.5rem; }
+  }
+  @media print {
+    .sidebar, .topbar, #themetoggle, .copybtn { display: none; }
+    .shell { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <button class="iconbtn" id="menubtn" aria-label="Toggle navigation">☰ Contents</button>
+  <strong style="font-size:.95rem">NodeViewJS</strong>
+  <button class="iconbtn" id="themetoggle-m" style="margin-left:auto" aria-label="Toggle theme">◐</button>
+</div>
+
+<button class="iconbtn" id="themetoggle" aria-label="Toggle theme">◐ Theme</button>
+
+<div class="shell">
+  <nav class="sidebar" id="sidebar" aria-label="Guide contents">
+    <div class="brand">
+      <div class="brand-mark">NV</div>
+      <div class="brand-name">NodeViewJS</div>
+    </div>
+    <p class="brand-sub">Desktop apps with Node.js and the system web view</p>
+    <input id="navsearch" type="search" placeholder="Filter sections…" aria-label="Filter sections">
+    <ul id="toc"></ul>
+    <div class="side-foot">
+      <a href="https://github.com/0trebor0/NodeViewJS">Repository</a>
+      <a href="https://github.com/0trebor0/NodeViewJS/tree/main/wiki">Wiki</a>
+      <a href="https://github.com/0trebor0/NodeViewJS/issues">Issues</a>
+      <span>MIT licensed</span>
+    </div>
+  </nav>
+
+  <main class="main">
+  <div class="content">
+
+    <header class="hero">
+      <h1>NodeViewJS</h1>
+      <p class="lede">
+        A lightweight desktop runtime for building small apps with Node.js, plain HTML/CSS/JavaScript,
+        and the operating system's own web view. Windows uses WebView2, macOS uses WKWebView,
+        and Linux uses WebKitGTK.
+      </p>
+      <div class="badges">
+        <span class="badge">MIT</span>
+        <span class="badge">Node.js 20+</span>
+        <span class="badge ok">Windows verified</span>
+        <span class="badge wip">macOS / Linux pending validation</span>
+        <span class="badge">v0.1.0 (untagged)</span>
+      </div>
+      <p>
+        Your frontend gets a safe <code>window.NodeViewJS</code> bridge; privileged work stays in
+        registered Node.js commands. Raw Node.js APIs such as <code>require()</code> are never
+        exposed to the web view.
+      </p>
+    </header>
+
+    <div class="cards">
+      <div class="card"><h4>No Chromium bundled</h4><p>Apps use the web view already installed on the machine, so packages stay small.</p></div>
+      <div class="card"><h4>No local HTTP server</h4><p>Packaged HTML loads directly from disk through a private per-WebView mapping.</p></div>
+      <div class="card"><h4>Command-gated backend</h4><p>The frontend can only call commands you register, each behind a named permission.</p></div>
+      <div class="card"><h4>Signed updates</h4><p>Ed25519 manifests, HTTPS delivery, transactional install with rollback.</p></div>
+    </div>
+
+    <div class="note">
+      <strong>Platform parity</strong>
+      <p>Windows is the reference platform and is verified locally. macOS and Linux compile and pass
+      packaging/platform-boundary tests, but several security controls — trusted-document checks,
+      capability lockdown, native IPC limits, package containment, and integrity verification — do not
+      yet have Windows parity. Sections below are marked where a feature is Windows-only.</p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2 id="requirements">Requirements</h2>
+
+    <p>All platforms need <strong>Node.js 20 or newer</strong> and <strong>Python 3</strong> (used by <code>node-gyp</code>).</p>
+
+    <div class="tablewrap">
+    <table>
+      <thead><tr><th>Platform</th><th>Additional requirements</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>Windows</strong></td>
+          <td>Windows 10 or newer · Visual Studio Build Tools 2022 with the <em>Desktop development with C++</em> workload · Python 3 discoverable by <code>node-gyp</code> · Microsoft Edge WebView2 Runtime</td>
+        </tr>
+        <tr>
+          <td><strong>macOS</strong></td>
+          <td>macOS 12 or newer · Xcode command-line tools with the macOS SDK</td>
+        </tr>
+        <tr>
+          <td><strong>Linux</strong></td>
+          <td>GTK 3 development headers · WebKitGTK 4.1 development headers (<code>webkit2gtk-4.1</code>) · <code>pkg-config</code></td>
+        </tr>
+      </tbody>
+    </table>
+    </div>
+
+    <p>On Ubuntu 24.04:</p>
+    <div class="codewrap"><pre><code>sudo apt-get install libgtk-3-dev libwebkit2gtk-4.1-dev pkg-config</code></pre><span class="lang">bash</span></div>
+
+    <p>The build script downloads and stages the WebView2 SDK package into <code>vendor/</code> when needed.</p>
+
+    <div class="warn">
+      <strong>If node-gyp cannot find Python</strong>
+      <p>Portable packaging rebuilds the native launcher by default. Install Python 3 or set <code>PYTHON</code> before building:</p>
+    </div>
+    <div class="codewrap"><pre><code>winget install Python.Python.3.12
+$env:PYTHON = "C:\Path\To\Python\python.exe"
+npm run build</code></pre><span class="lang">powershell</span></div>
+
+    <!-- ============================================================ -->
+    <h2 id="quick-start">Quick start</h2>
+
+    <p>The fastest path from nothing to a running desktop app:</p>
+
+    <div class="codewrap"><pre><code>npm install github:0trebor0/NodeViewJS
+npx nodeviewjs create MyApp
+cd MyApp
+npm install
+npm run dev
+npm run package</code></pre><span class="lang">powershell</span></div>
+
+    <p><code>nodeviewjs create</code> scaffolds:</p>
+    <div class="codewrap"><pre><code>MyApp/
+  package.json
+  app.js
+  index.html</code></pre><span class="lang">text</span></div>
+
+    <p>
+      <code>npm run dev</code> opens the window with DevTools and live reload.
+      <code>npm run package</code> produces a portable folder you can copy to another machine.
+      That is the whole loop — everything below is detail.
+    </p>
+
+    <!-- ============================================================ -->
+    <h2 id="manual-setup">Manual setup</h2>
+
+    <p>Use these steps to wire NodeViewJS into an existing project instead of scaffolding a new one.</p>
+
+    <h3 id="step-1-project">1. Create or open your app project</h3>
+    <div class="codewrap"><pre><code>mkdir MyApp
+cd MyApp
+npm init -y</code></pre><span class="lang">powershell</span></div>
+
+    <h3 id="step-2-install">2. Install NodeViewJS</h3>
+    <div class="codewrap"><pre><code>npm install github:0trebor0/NodeViewJS</code></pre><span class="lang">powershell</span></div>
+
+    <p>The install builds and provides the runtime API, the <code>nodeviewjs</code> CLI, and the native
+    addon and launcher. It therefore requires the native build prerequisites above, plus network access
+    the first time the WebView2 SDK is downloaded.</p>
+
+    <h3 id="step-3-configure">3. Configure your app package</h3>
+    <p>Add a <code>nodeviewjs</code> block and scripts to your project's <code>package.json</code>:</p>
+
+    <div class="codewrap"><pre><code>{
+  "name": "my-app",
+  "version": "0.1.0",
+  "main": "app.js",
+  "nodeviewjs": {
+    "name": "MyApp",
+    "appId": "com.example.my-app",
+    "entry": "app.js",
+    "icon": "assets/app.ico",
+    "macIcon": "assets/app.icns",
+    "protocols": [{ "scheme": "my-app", "name": "My App URL" }],
+    "fileAssociations": [{ "extension": ".myapp", "name": "My App document" }],
+    "include": ["assets"],
+    "exclude": ["assets/private", "assets/private/*"],
+    "secretWarnings": true,
+    "metadata": {
+      "companyName": "My Company",
+      "fileDescription": "My App",
+      "productName": "My App",
+      "copyright": "Copyright (C) 2026 My Company"
+    }
+  },
+  "scripts": {
+    "dev": "nodeviewjs dev app.js",
+    "package": "nodeviewjs package",
+    "installer": "nodeviewjs installer",
+    "update:manifest": "nodeviewjs update-manifest"
+  },
+  "dependencies": {
+    "nodeviewjs": "github:0trebor0/NodeViewJS"
+  }
+}</code></pre><span class="lang">json</span></div>
+
+    <h4>Configuration keys</h4>
+    <div class="tablewrap">
+    <table>
+      <thead><tr><th>Key</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td><code>name</code></td><td>Portable folder name and executable name.</td></tr>
+        <tr><td><code>appId</code></td><td>Stable identity used for app data, notifications, and signed updates. Keep it constant across releases.</td></tr>
+        <tr><td><code>entry</code></td><td>Your backend NodeViewJS app entry file.</td></tr>
+        <tr><td><code>icon</code></td><td>Optional Windows <code>.ico</code> used as the window/taskbar icon and embedded in the exe.</td></tr>
+        <tr><td><code>macIcon</code></td><td>Optional macOS <code>.icns</code> bundle icon.</td></tr>
+        <tr><td><code>protocols</code></td><td>Custom URL schemes registered by the per-user Windows installer.</td></tr>
+        <tr><td><code>fileAssociations</code></td><td>Extensions registered with Windows Open With and Default Apps.</td></tr>
+        <tr><td><code>include</code></td><td>Extra project files or folders copied into <code>resources/app</code>.</td></tr>
+        <tr><td><code>exclude</code></td><td>Files or folders removed from the app bundle.</td></tr>
+        <tr><td><code>secretWarnings</code></td><td>Windows default <code>true</code>. Set <code>false</code> to disable redacted credential-pattern warnings.</td></tr>
+        <tr><td><code>metadata</code></td><td>Windows version metadata compiled into the launcher during <code>npm run build</code>.</td></tr>
+      </tbody>
+    </table>
+    </div>
+
+    <div class="warn">
+      <strong>Windows path rules</strong>
+      <p><code>entry</code>, <code>icon</code>, <code>include</code>, and <code>exclude</code> values must be
+      relative and traversal-free. Packaging rejects inputs or destinations containing symbolic links,
+      junctions, or other reparse-point escapes.</p>
+    </div>
+
+    <h3 id="step-4-files">4. Create your app files</h3>
+
+    <p><code>app.js</code> — the backend:</p>
+    <div class="codewrap"><pre><code>const path = require("node:path");
+const { App } = require("nodeviewjs");
+
+const app = new App({
+  title: "My App",
+  width: 900,
+  height: 600,
+  entry: path.join(__dirname, "index.html")
+});
+
+app.command("greet", (name) =&gt; {
+  if (typeof name !== "string" || name.trim() === "") {
+    throw new TypeError("name must be a non-empty string.");
+  }
+  return `Hello ${name} from NodeViewJS`;
+});
+
+app.run();</code></pre><span class="lang">javascript</span></div>
+
+    <p><code>index.html</code> — the frontend:</p>
+    <div class="codewrap"><pre><code>&lt;!doctype html&gt;
+&lt;html&gt;
+  &lt;body&gt;
+    &lt;h1&gt;My App&lt;/h1&gt;
+    &lt;input id="name" value="World" /&gt;
+    &lt;button id="greet"&gt;Greet&lt;/button&gt;
+    &lt;p id="output"&gt;&lt;/p&gt;
+
+    &lt;script&gt;
+      const nameInput = document.querySelector("#name");
+      const greetButton = document.querySelector("#greet");
+      const output = document.querySelector("#output");
+
+      greetButton.onclick = async () =&gt; {
+        output.textContent = await NodeViewJS.invoke("greet", nameInput.value);
+      };
+    &lt;/script&gt;
+  &lt;/body&gt;
+&lt;/html&gt;</code></pre><span class="lang">html</span></div>
+
+    <div class="note">
+      <strong>No bridge script tag</strong>
+      <p>Do not add a bridge <code>&lt;script&gt;</code> to your source HTML. NodeViewJS provides
+      <code>window.NodeViewJS</code> automatically. <code>window.NodeView</code> is retained as a
+      compatibility alias; new apps should use <code>window.NodeViewJS</code>.</p>
+    </div>
+
+    <h3 id="step-5-dev">5. Run during development</h3>
+    <div class="codewrap"><pre><code>npm run dev     # runs: nodeviewjs dev app.js</code></pre><span class="lang">powershell</span></div>
+
+    <p>Dev mode enables DevTools and startup timing, and watches the entry file's directory,
+    reloading the web view when frontend <code>.html</code>, <code>.css</code>, or <code>.js</code>
+    files change. Generated folders such as <code>node_modules</code>, <code>build</code>, and
+    <code>.nodeview-webview</code> are ignored.</p>
+
+    <ul>
+      <li>Frontend reloads keep the Node.js backend process running. <strong>Restart dev mode after changing backend code.</strong></li>
+      <li>Uncaught backend exceptions and promise rejections print a <code>[NodeViewJS dev]</code> heading with a stack trace.</li>
+      <li>Missing frontend entries fail before a native window opens.</li>
+      <li>Native web view failures show a Windows dialog and write to stderr; packaged apps capture that in <code>resources/&lt;AppName&gt;.log</code>.</li>
+      <li>Packaged Windows apps force DevTools off even if <code>devtools: true</code> is set.</li>
+    </ul>
+
+    <p><code>nodeviewjs dev</code> manages <code>NODEVIEW_DEVTOOLS</code>, <code>NODEVIEW_DEV_WATCH</code>,
+    and <code>NODEVIEW_STARTUP_TIMING</code> internally. Packaged apps ignore inherited values for those
+    development defaults, so launching from a development shell cannot accidentally enable file
+    watching or timing.</p>
+
+    <h3 id="step-6-package">6. Create the portable app</h3>
+    <div class="codewrap"><pre><code>npm run package     # runs: nodeviewjs package</code></pre><span class="lang">powershell</span></div>
+
+    <p>The CLI packages the <em>current</em> project — not the NodeViewJS demo — and writes
+    <code>build/portable/MyApp/</code>. If the native addon or launcher is missing, packaging builds
+    the runtime first.</p>
+
+    <!-- ============================================================ -->
+    <h2 id="cli">CLI reference</h2>
+
+    <div class="tablewrap">
+    <table>
+      <thead><tr><th>Command</th><th>What it does</th></tr></thead>
+      <tbody>
+        <tr><td><code>nodeviewjs create MyApp</code></td><td>Scaffold a starter app folder.</td></tr>
+        <tr><td><code>nodeviewjs setup</code></td><td>Prepare platform SDK files (WebView2 on Windows).</td></tr>
+        <tr><td><code>nodeviewjs build</code></td><td>Build the native addon and launcher.</td></tr>
+        <tr><td><code>nodeviewjs start app.js</code></td><td>Run the app normally.</td></tr>
+        <tr><td><code>nodeviewjs dev app.js</code></td><td>Run with DevTools, live reload, and startup timing.</td></tr>
+        <tr><td><code>nodeviewjs package</code></td><td>Portable folder (Windows), <code>.app</code>+DMG (macOS), or portable folder (Linux).</td></tr>
+        <tr><td><code>nodeviewjs installer</code></td><td>Per-user Windows installer.</td></tr>
+        <tr><td><code>nodeviewjs update-manifest &lt;url&gt;</code></td><td>Sign an Ed25519 update manifest for the built installer.</td></tr>
+        <tr><td><code>nodeviewjs --help</code></td><td>Show CLI help.</td></tr>
+      </tbody>
+    </table>
+    </div>
+
+    <p>You rarely need a global install — npm resolves <code>nodeviewjs</code> from
+    <code>node_modules/.bin</code> inside npm scripts.</p>
+
+    <!-- ============================================================ -->
+    <h2 id="frontend-bridge">Frontend bridge</h2>
+
+    <p>The bridge exposes five methods on <code>window.NodeViewJS</code>.</p>
+
+    <div class="tablewrap">
+    <table>
+      <thead><tr><th>Method</th><th>Behavior</th></tr></thead>
+      <tbody>
+        <tr><td><code>invoke(name, payload)</code></td><td>Calls a backend command. Returns a promise for the command's return value.</td></tr>
+        <tr><td><code>on(event, handler)</code></td><td>Subscribes to a backend event. Registers synchronously and returns an unsubscribe function.</td></tr>
+        <tr><td><code>once(event, handler)</code></td><td>Same, fired at most once. Also returns an unsubscribe function.</td></tr>
+        <tr><td><code>off(event, handler)</code></td><td>Removes a listener.</td></tr>
+        <tr><td><code>emit(event, payload)</code></td><td>Sends a one-way event to the backend.</td></tr>
+        <tr><td><code>ready()</code></td><td>Idempotent. Flushes queued events early; not required in the normal case.</td></tr>
+      </tbody>
+    </table>
+    </div>
+
+    <div class="warn">
+      <strong>Do not await on() or once()</strong>
+      <p>They register listeners synchronously and return unsubscribe functions, not promises.</p>
+    </div>
+
+    <h3 id="invoke">Calling commands</h3>
+    <div class="codewrap"><pre><code>try {
+  const result = await NodeViewJS.invoke("settings:read", { section: "editor" });
+} catch (error) {
+  console.error("Command failed:", error);
+}</code></pre><span class="lang">javascript</span></div>
+
+    <p><code>invoke()</code> rejects when the command is unknown, unauthorized, throws, times out, or
+    receives an invalid payload — always handle rejection. An <code>async</code> backend command with
+    no explicit return value resolves to <code>undefined</code>.</p>
+
+    <h3 id="frontend-events">Events</h3>
+    <div class="codewrap"><pre><code>const unsubscribe = NodeViewJS.on("status:changed", ({ status }) =&gt; {
+  document.querySelector("#status").textContent = status;
+});
+
+NodeViewJS.once("saved", ({ id }) =&gt; console.log("Saved", id));
+
+NodeViewJS.emit("page:opened", { page: "home" });
+
+unsubscribe();</code></pre><span class="lang">javascript</span></div>
+
+    <p><code>emit()</code> is one-way and does not acknowledge handler completion. When the frontend
+    must wait for backend work, use <code>invoke()</code>. For one-way workflows that still need
+    confirmation, have the receiver emit a separate acknowledgement event.</p>
+
+    <h3 id="readiness">Readiness and buffering</h3>
+    <p>Events in both directions are buffered until the frontend bridge is ready. That covers
+    <code>app.emit()</code> before <code>app.run()</code> and <code>NodeViewJS.emit()</code> while the
+    page is still loading. The bridge flushes automatically just after the page's <code>load</code>
+    handlers run, and resets readiness on reload.</p>
+
+    <div class="codewrap"><pre><code>NodeViewJS.on("app:state", renderState);
+await NodeViewJS.ready();   // only for advanced startup control</code></pre><span class="lang">javascript</span></div>
+
+    <h3 id="payloads">Supported payloads and limits</h3>
+    <p>Payloads and results support JSON-style data only: <code>null</code>, booleans, finite numbers,
+    strings (including Unicode), arrays, and plain objects.</p>
+    <p><strong>Unsupported:</strong> functions, symbols, <code>BigInt</code>, <code>NaN</code>, infinity,
+    DOM elements, cyclic objects, class instances, streams, and native Node.js objects. Convert these
+    to plain data first.</p>
+
+    <div class="tablewrap">
+    <table>
+      <thead><tr><th>Limit</th><th>Value</th></tr></thead>
+      <tbody>
+        <tr><td>Message size</td><td>256 KiB</td></tr>
+        <tr><td>Nesting depth</td><td>32 levels</td></tr>
+        <tr><td>Payload nodes</td><td>10,000</td></tr>
+        <tr><td>Command / event name length</td><td>128 characters</td></tr>
+        <tr><td>Pending calls per window</td><td>64</td></tr>
+        <tr><td>Request timeout</td><td>30 seconds</td></tr>
+        <tr><td>Readiness queue per direction</td><td>1,024 events or 1 MiB per window</td></tr>
+      </tbody>
+    </table>
+    </div>
+
+    <p>Before transport the bridge creates and revalidates a detached JSON snapshot, so stateful
+    getters cannot change a payload after validation.</p>
+
+    <h3 id="bridge-loading">How the bridge is loaded</h3>
+    <p>During portable packaging, NodeViewJS writes the bridge to
+    <code>resources/app/__nodeview/bridge.js</code> and adds a relative external script reference to
+    every copied <code>.html</code> file. <strong>Your source HTML is never changed.</strong> This
+    avoids requiring <code>unsafe-inline</code>, so Windows pages can use a policy such as
+    <code>script-src 'self'</code> while the native host limits resources to the app root.</p>
+
+    <div class="codewrap"><pre><code>Node app starts
+  -&gt; native window opens
+  -&gt; WebView2 is created
+  -&gt; packaged HTML file is loaded directly
+  -&gt; its embedded NodeViewJS bridge starts during parsing</code></pre><span class="lang">text</span></div>
+
+    <p>This is fast because there is no local HTTP server, the HTML rewrite happens once at packaging
+    time rather than at startup, packaged native startup skips bridge registration, and pages load
+    directly from local files through a private per-WebView mapping.</p>
+
+    <p>Development mode keeps native document-start injection so live reload works without writing
+    generated HTML next to your source. The same bridge stays embedded in the native addon as a
+    fallback.</p>
+
+    <div class="warn">
+      <strong>Dynamically generated HTML</strong>
+      <p>Only files copied into the package are prepared. HTML generated after packaging must provide
+      its own frontend bridge if used as a top-level app page.</p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2 id="backend-api">Backend API</h2>
+
+    <p>NodeViewJS exports:</p>
+    <div class="codewrap"><pre><code>const {
+  App,
+  AppWindow,
+  Updater,
+  clipboard,
+  config,
+  dialog,
+  ipc,
+  notification,
+  shell
+} = require("nodeviewjs");</code></pre><span class="lang">javascript</span></div>
+
+    <h3 id="new-app">new App(options)</h3>
+    <div class="codewrap"><pre><code>const app = new App({
+  title: "NodeViewJS Demo",
+  appId: "com.example.nodeview-demo",
+  width: 900,
+  height: 600,
+  minWidth: 500,
+  minHeight: 300,
+  maxWidth: 1600,
+  maxHeight: 1000,
+  resizable: true,
+  frame: true,
+  closable: true,
+  minimizable: true,
+  maximizable: true,
+  center: true,
+  maximized: false,
+  alwaysOnTop: false,
+  closeToHide: false,
+  transparent: false,
+  windowColors: null,
+  tray: false,
+  menu: null,
+  singleInstance: false,
+  devtools: false,
+  startupTiming: false,
+  icon: "assets/icon.ico",
+  entry: "index.html",
+  permissions: ["fs:read"]
+});</code></pre><span class="lang">javascript</span></div>
+
+    <p><code>entry</code> is required and should point to the local HTML file to load. Use an absolute
+    or correctly resolved path — <code>path.join(__dirname, "index.html")</code>.</p>
+
+    <h3 id="lifecycle">App lifecycle</h3>
+    <p>Call <code>app.run()</code> once after registering commands, plugins, and backend event
+    handlers. It opens the main window and returns <code>true</code>; a secondary launch of a
+    single-instance app returns <code>false</code> after forwarding its arguments.
+    <code>app.quit()</code> closes every window and releases native resources.</p>
+    <p><code>app.show()</code> and <code>app.hide()</code> target the main window. Each
+    <code>AppWindow</code> also provides <code>show()</code>, <code>hide()</code>,
+    <code>reload()</code>, and <code>close()</code>.</p>
+
+    <h3 id="app-data">Web view profiles, app data, and logs</h3>
+    <p><code>appId</code> identifies persistent web view data and defaults to <code>title</code>.
+    Keep it stable across releases so the same profile is reused.</p>
+    <div class="tablewrap">
+    <table>
+      <thead><tr><th>Platform</th><th>Profile</th><th>Backend log</th></tr></thead>
+      <tbody>
+        <tr><td>Windows</td><td><code>%LOCALAPPDATA%\NodeViewJS\&lt;app-id&gt;-&lt;hash&gt;\WebView2</code></td><td><code>%LOCALAPPDATA%\NodeViewJS\Logs\&lt;app-id&gt;-&lt;hash&gt;\backend.log</code></td></tr>
+        <tr><td>macOS</td><td>App-support path ending in <code>WebKit</code></td><td><code>~/Library/Logs/NodeViewJS/&lt;app-id&gt;-&lt;hash&gt;/backend.log</code></td></tr>
+        <tr><td>Linux</td><td>—</td><td><code>${XDG_STATE_HOME:-~/.local/state}/nodeviewjs/&lt;app-id&gt;-&lt;hash&gt;/backend.log</code></td></tr>
+      </tbody>
+    </table>
+    </div>
+    <p>Set <code>NODEVIEW_LOG_PATH</code> to override the log file during debugging or tests. Logs
+    append across launches and rotate to <code>backend.log.1</code> past the runtime size limit.
+    Existing <code>.nodeview-webview</code> folders are left untouched and can be removed after
+    confirming the new profile works.</p>
+
+    <h3 id="window-options">Window options and controls</h3>
+
+    <p><code>transparent: true</code> makes the web view canvas and native client area fully
+    transparent, so transparent page pixels reveal windows behind the app. The standard Windows frame
+    stays visible, partial opacity is unsupported, and the reserved color <code>rgb(1, 0, 1)</code>
+    must not appear in page content — Windows uses it internally as the transparency key.</p>
+
+    <p><code>closeToHide: true</code> makes the close button hide the window instead of quitting.
+    <code>app.quit()</code> still closes the app fully.</p>
+
+    <p>On Windows, <code>frame: false</code> hides the native title bar, system menu, and caption
+    buttons. <code>closable</code>, <code>minimizable</code>, and <code>maximizable</code>
+    independently control native actions when the frame is enabled. <code>closable: false</code>
+    blocks the native close action, but <code>window.close()</code> and <code>app.quit()</code> remain
+    available to backend code.</p>
+
+    <div class="codewrap"><pre><code>const window = app.mainWindow;
+
+window.minimize();
+window.maximize();
+window.restore();
+window.setFullscreen(true);
+window.setTitle("Updated title");
+window.setSize(960, 640);
+window.setPosition(100, 80);
+
+console.log(window.getState());</code></pre><span class="lang">javascript</span></div>
+
+    <h3 id="window-colors">Native window colors</h3>
+    <div class="platforms"><span class="plat win">Windows 11 build 22000+</span></div>
+
+    <div class="codewrap"><pre><code>const app = new App({
+  entry: "index.html",
+  windowColors: {
+    titleBar: "#162033",
+    titleText: "#ffffff",
+    border: "#3b82f6"
+  }
+});
+
+app.setWindowColors({ titleBar: "#24324a", titleText: "#ffffff", border: "#60a5fa" });
+console.log(app.mainWindow.getState().windowColorsSupported);</code></pre><span class="lang">javascript</span></div>
+
+    <p>Keys are <code>titleBar</code>, <code>titleText</code>, and <code>border</code>, each
+    <code>#RRGGBB</code>. Runtime updates preserve colors you do not supply. Pass <code>null</code> for
+    one key to reset that color, or <code>app.setWindowColors(null)</code> to restore all defaults.
+    Check <code>windowColorsSupported</code> after <code>app.run()</code> before relying on it — on
+    Windows 10 it is <code>false</code>; use <code>frame: false</code> and a CSS title bar instead.</p>
+
+    <h3 id="title-bars">Custom title bars</h3>
+    <p>Custom HTML/CSS chrome works on Windows 10 and 11. Disable the native frame and register
+    permission-gated window commands:</p>
+
+    <div class="codewrap"><pre><code>const app = new App({ entry: "index.html", frame: false });
+
+app.command("window:startDrag", { permission: "window:control" }, () =&gt; {
+  app.mainWindow.startDrag();
+  return true;
+});
+
+app.command("window:minimize", { permission: "window:control" }, () =&gt; {
+  app.mainWindow.minimize();
+  return true;
+});
+
+app.command("window:close", { permission: "window:control" }, () =&gt; {
+  setImmediate(() =&gt; app.mainWindow.close());
+  return true;
+});
+
+app.run();</code></pre><span class="lang">javascript</span></div>
+
+    <div class="codewrap"><pre><code>&lt;header class="titlebar"&gt;
+  &lt;span class="titlebar-title"&gt;My App&lt;/span&gt;
+  &lt;button id="minimize" aria-label="Minimize"&gt;&amp;#x2212;&lt;/button&gt;
+  &lt;button id="close" class="close" aria-label="Close"&gt;&amp;#x2715;&lt;/button&gt;
+&lt;/header&gt;
+
+&lt;script&gt;
+  document.querySelector(".titlebar").addEventListener("pointerdown", (event) =&gt; {
+    if (event.target.closest("button")) return;
+    NodeViewJS.invoke("window:startDrag");
+  });
+  document.querySelector("#minimize").addEventListener("click", () =&gt; {
+    NodeViewJS.invoke("window:minimize");
+  });
+  document.querySelector("#close").addEventListener("click", () =&gt; {
+    NodeViewJS.invoke("window:close");
+  });
+&lt;/script&gt;</code></pre><span class="lang">html</span></div>
+
+    <div class="warn">
+      <strong>Schedule the close</strong>
+      <p>Keep the close operation inside <code>setImmediate()</code> so the IPC response can finish
+      before the window is destroyed.</p>
+    </div>
+
+    <h3 id="multiple-windows">Multiple windows</h3>
+    <div class="codewrap"><pre><code>const settingsWindow = app.createWindow({
+  title: "Settings",
+  width: 560,
+  height: 420,
+  entry: "settings.html"
+});
+
+settingsWindow.on("settings-saved", (settings) =&gt; console.log(settings));
+
+app.run();</code></pre><span class="lang">javascript</span></div>
+
+    <p>Unspecified secondary-window options inherit from the main window. Each window has its own
+    native window, web view, IPC handler, event methods, menus, and window controls —
+    <code>show()</code>, <code>hide()</code>, <code>reload()</code>, <code>close()</code>,
+    <code>minimize()</code>, <code>maximize()</code>, <code>restore()</code>,
+    <code>setFullscreen()</code>, <code>setTitle()</code>, <code>setWindowColors()</code>,
+    <code>setSize()</code>, <code>setPosition()</code>, <code>startDrag()</code>,
+    <code>setMenu()</code>, <code>showContextMenu()</code>, and <code>getState()</code>.</p>
+    <p><code>app.emit()</code> broadcasts to every open window; <code>window.emit()</code> targets one.
+    <code>app.quit()</code> closes all windows.</p>
+
+    <h3 id="taskbar">Taskbar integration</h3>
+    <div class="platforms"><span class="plat win">Windows</span></div>
+    <div class="codewrap"><pre><code>app.setTaskbarProgress(0.65, "normal"); // normal, paused, error, or indeterminate
+app.setTaskbarOverlay("assets/badge.ico", "New messages");
+app.requestAttention("informational"); // informational, critical, or stop
+
+app.setTaskbarProgress(null); // clear progress
+app.setTaskbarOverlay(null);  // remove overlay
+app.requestAttention("stop");</code></pre><span class="lang">javascript</span></div>
+    <p>The same methods exist on every <code>AppWindow</code>. Progress ranges from <code>0</code> to
+    <code>1</code>, and overlay images must be existing <code>.ico</code> files.</p>
+
+    <h3 id="tray">System tray</h3>
+    <div class="codewrap"><pre><code>const app = new App({
+  title: "My App",
+  entry: "index.html",
+  closeToHide: true,
+  tray: {
+    title: "My App",
+    icon: "assets/app.ico",
+    menu: [
+      { id: "tray.show", label: "Show" },
+      { id: "tray.enabled", label: "Enabled", type: "checkbox", checked: true },
+      { type: "separator" },
+      { id: "tray.quit", label: "Quit" }
+    ]
+  }
+});
+
+app.on("tray-menu", ({ id, checked }) =&gt; {
+  if (id === "tray.show") app.show();
+  if (id === "tray.quit") app.quit();
+  if (id === "tray.enabled") console.log("Enabled:", checked);
+});</code></pre><span class="lang">javascript</span></div>
+
+    <p>Omit <code>tray.menu</code> or set it to <code>null</code> for the built-in Show/Quit items. A
+    custom menu replaces those and supports normal items, checkboxes, separators, disabled items, and
+    submenus. Tray accelerators are rejected because tray menus are not active while the app is
+    unfocused. Double-clicking the tray icon always shows the window.</p>
+
+    <h3 id="menus">Native application menus</h3>
+    <p>Menus are declarative templates. Items carry bounded string IDs and emit events; templates
+    cannot execute native commands or callbacks directly.</p>
+
+    <div class="codewrap"><pre><code>const app = new App({
+  entry: "index.html",
+  menu: [
+    {
+      label: "File",
+      submenu: [
+        { id: "file.open", label: "Open", accelerator: "Ctrl+O" },
+        { type: "separator" },
+        { id: "file.autosave", label: "Auto save", type: "checkbox", checked: true }
+      ]
+    }
+  ]
+});
+
+app.on("menu", ({ id, checked, window }) =&gt; {
+  if (id === "file.open") console.log("Open selected", window.id);
+  if (id === "file.autosave") console.log("Auto save:", checked);
+});</code></pre><span class="lang">javascript</span></div>
+
+    <p>Use <code>app.setMenu(template)</code> for the main window or
+    <code>window.setMenu(template)</code> for another. Passing <code>null</code> removes the menu.
+    Supported types are <code>normal</code>, <code>checkbox</code>, <code>separator</code>, and nested
+    <code>submenu</code>. Templates are limited to <strong>256 items and eight levels</strong>; IDs and
+    accelerators must be unique. Accelerators support Ctrl, Alt, Shift, letters, numbers, F1–F24, and
+    common navigation keys.</p>
+
+    <div class="codewrap"><pre><code>app.mainWindow.showContextMenu([
+  { id: "edit.copy", label: "Copy", accelerator: "Ctrl+C" },
+  { id: "edit.delete", label: "Delete" }
+]);
+
+app.mainWindow.showContextMenu(contextItems, { x: 40, y: 80 });</code></pre><span class="lang">javascript</span></div>
+
+    <p>Context selections emit the same backend <code>menu</code> event. If the web view requests a
+    context menu, route that through a registered command requiring <code>window:control</code> —
+    native menu APIs remain backend-only.</p>
+
+    <!-- ============================================================ -->
+    <h2 id="commands">Commands and permissions</h2>
+
+    <p>Registering a command is what makes backend behavior reachable from the frontend.</p>
+
+    <div class="codewrap"><pre><code>app.command("ping", async () =&gt; "pong");</code></pre><span class="lang">javascript</span></div>
+
+    <p>Add permission metadata with the three-argument form:</p>
+
+    <div class="codewrap"><pre><code>const app = new App({
+  entry: "index.html",
+  permissions: {
+    allow: ["fs:*", "dialog:open:settings"],
+    deny: ["fs:write"]
+  }
+});
+
+app.command("readConfig", { permission: "fs:read", scope: "config" }, async () =&gt; {
+  return { theme: "dark" };
+});</code></pre><span class="lang">javascript</span></div>
+
+    <p>A plain array such as <code>permissions: ["fs:read"]</code> is a simple allow-list. Policy
+    objects add deny rules, and <strong>deny always beats allow</strong>.</p>
+
+    <ul>
+      <li>Use a group such as <code>fs:*</code> or <code>dialog:*</code> in an app policy to grant a permission family.</li>
+      <li>Add a scope, such as <code>dialog:open:settings</code>, to grant one named resource scope.</li>
+      <li>Commands can require several permissions at once.</li>
+      <li>Permission groups and wildcard scopes are accepted <em>only</em> in app policies, never as command requirements.</li>
+    </ul>
+
+    <div class="codewrap"><pre><code>app.command("readSettings", {
+  permissions: ["fs:read:config", "dialog:open:settings"]
+}, handler);</code></pre><span class="lang">javascript</span></div>
+
+    <p>Individual windows can narrow the app-level policy — useful for secondary or less-trusted
+    views. The app policy remains the maximum permission set, and a command invoked from a window must
+    pass <em>both</em> policies.</p>
+
+    <div class="codewrap"><pre><code>const previewWindow = app.createWindow({
+  title: "Preview",
+  entry: path.join(__dirname, "preview.html"),
+  permissions: ["fs:read:config"]
+});</code></pre><span class="lang">javascript</span></div>
+
+    <h4>Permission names</h4>
+    <div class="tablewrap">
+    <table>
+      <thead><tr><th>Permission</th><th>Grants</th></tr></thead>
+      <tbody>
+        <tr><td><code>fs:read</code></td><td>Reading files through your commands.</td></tr>
+        <tr><td><code>fs:write</code></td><td>Writing files through your commands.</td></tr>
+        <tr><td><code>dialog:open</code></td><td>Native open-file dialogs.</td></tr>
+        <tr><td><code>dialog:save</code></td><td>Native save-file dialogs.</td></tr>
+        <tr><td><code>clipboard:read</code></td><td>Reading clipboard text.</td></tr>
+        <tr><td><code>clipboard:write</code></td><td>Writing clipboard text.</td></tr>
+        <tr><td><code>shell:open</code></td><td>Opening external URLs or existing local paths.</td></tr>
+        <tr><td><code>notification:show</code></td><td>Displaying notifications.</td></tr>
+        <tr><td><code>window:control</code></td><td>Window drag, minimize, maximize, close, context menus.</td></tr>
+      </tbody>
+    </table>
+    </div>
+
+    <p>Command and event names must be non-empty strings. Invoking a command the backend did not
+    register rejects with an <code>Unknown command</code> error.</p>
+
+    <!-- ============================================================ -->
+    <h2 id="events">Backend events</h2>
+
+    <div class="codewrap"><pre><code>app.on("ready", payload =&gt; console.log(payload));
+app.once("first-open", payload =&gt; console.log(payload));
+
+app.emit("theme-changed", { theme: "dark" });
+
+const onStatus = (status) =&gt; console.log(status);
+app.on("status", onStatus);
+app.off("status", onStatus);</code></pre><span class="lang">javascript</span></div>
+
+    <p>Emitting before <code>app.run()</code> is safe — events buffer until the bridge is ready:</p>
+
+    <div class="codewrap"><pre><code>app.emit("theme-changed", { theme: "dark" });
+app.run();</code></pre><span class="lang">javascript</span></div>
+
+    <p><code>app.emit()</code> broadcasts to every window. Use <code>app.mainWindow.emit()</code> or
+    another <code>AppWindow.emit()</code> to target one. <code>on()</code>, <code>once()</code>, and
+    <code>off()</code> exist on both <code>App</code> and <code>AppWindow</code>.</p>
+
+    <div class="note">
+      <strong>Emitting to a closed window</strong>
+      <p>A closed window can never flush its readiness queue, so the two paths differ.
+      <code>app.emit()</code> addresses whichever windows are live and skips closed ones silently.
+      <code>AppWindow.emit()</code> names one specific window, so emitting at a closed one throws
+      <code>Window has been closed.</code> immediately instead of queueing events that will never
+      arrive. Check <code>window.isClosed</code> when a window may already be gone — a window that has
+      not been opened <em>yet</em> is not closed, so it still buffers events emitted before
+      <code>app.run()</code>.</p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2 id="plugins">Plugins</h2>
+
+    <p>Backend plugins register namespaced commands and events without exposing Node.js to the
+    frontend.</p>
+
+    <div class="codewrap"><pre><code>app.use({
+  name: "example.settings",
+  version: "1.0.0",
+  permissions: ["fs:read:config"],
+  setup(plugin, options) {
+    plugin.command("read", { permission: "fs:read", scope: "config" },
+      () =&gt; loadSettings(options.fileName));
+
+    plugin.on("refresh", () =&gt; reloadSettings());
+    return () =&gt; closeSettingsStore();
+  },
+  start(plugin) {
+    plugin.emit("ready", { loaded: true });
+  },
+  stop() {
+    flushSettings();
+  }
+}, { fileName: "settings.json" });</code></pre><span class="lang">javascript</span></div>
+
+    <p>The frontend then calls <code>NodeViewJS.invoke("example.settings:read")</code> and works with
+    events such as <code>example.settings:refresh</code> and <code>example.settings:ready</code>.
+    Plugin names must be lowercase dot-or-hyphen identifiers. Setup, start, stop, and cleanup hooks are
+    synchronous; setup is transactional and runs before <code>app.run()</code>.</p>
+
+    <div class="warn">
+      <strong>Plugins are trusted code</strong>
+      <p>Every plugin permission must be granted by the app policy, and each plugin command can require
+      only permissions the plugin declared. These declarations control host admission and frontend
+      routing — they are <em>not</em> an operating-system sandbox. Plugins are loaded explicitly by
+      backend code, never from the web view.</p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2 id="helpers">Runtime helpers</h2>
+
+    <p>All helpers below are trusted backend code and are never exposed directly to the web view.
+    Frontend access must go through a registered, permission-gated command.</p>
+
+    <h3 id="shell">Shell</h3>
+    <div class="codewrap"><pre><code>const { App, shell } = require("nodeviewjs");
+
+const app = new App({ entry: "index.html", permissions: ["shell:open"] });
+
+app.command("openWebsite", { permission: "shell:open" }, ({ url }) =&gt; {
+  return shell.openExternal(url);
+});
+
+app.command("showExport", { permission: "shell:open" }, ({ file }) =&gt; {
+  return shell.openPath(file);
+});</code></pre><span class="lang">javascript</span></div>
+
+    <p><code>shell.openExternal(url)</code> accepts only absolute <code>http:</code>,
+    <code>https:</code>, and <code>mailto:</code> URLs without embedded credentials.
+    <code>shell.openPath(path)</code> resolves the path and rejects it unless the file or directory
+    already exists. Both return <code>true</code> once Windows accepts the launch request and throw a
+    descriptive error otherwise. NodeViewJS provides no arbitrary command or shell-execution method.</p>
+
+    <h3 id="clipboard">Clipboard</h3>
+    <div class="codewrap"><pre><code>const { App, clipboard } = require("nodeviewjs");
+
+const app = new App({
+  entry: "index.html",
+  permissions: ["clipboard:read", "clipboard:write"]
+});
+
+app.command("clipboard:read", { permission: "clipboard:read" },
+  () =&gt; clipboard.readText());
+
+app.command("clipboard:write", { permission: "clipboard:write" },
+  ({ text }) =&gt; clipboard.writeText(text));</code></pre><span class="lang">javascript</span></div>
+
+    <p><code>readText()</code> returns current Unicode text or an empty string when the clipboard holds
+    no text. <code>writeText(text)</code> returns <code>true</code>. Null characters are rejected
+    because the Windows clipboard text format is null-terminated. An app policy can grant both with
+    <code>clipboard:*</code>.</p>
+
+    <h3 id="dialogs">Dialogs</h3>
+    <div class="codewrap"><pre><code>const { dialog } = require("nodeviewjs");
+
+dialog.message({ title: "My App", message: "Finished loading." });
+
+const sourcePath = dialog.openFile();
+const destinationPath = dialog.saveFile();</code></pre><span class="lang">javascript</span></div>
+
+    <p>File helpers return the selected absolute path, or <code>null</code> when the user cancels. The
+    save dialog asks before replacing an existing file.</p>
+
+    <h3 id="config">Config</h3>
+    <div class="codewrap"><pre><code>const { config } = require("nodeviewjs");
+
+const settings = await config.read({
+  appName: "MyApp",
+  fileName: "settings.json",
+  defaults: { theme: "light" }
+});
+
+await config.write({
+  appName: "MyApp",
+  fileName: "settings.json",
+  data: { theme: "dark" }
+});</code></pre><span class="lang">javascript</span></div>
+
+    <p>Config file names must be simple <code>.json</code> file names, not arbitrary paths. Files are
+    stored under the user's application-data directory by default rather than beside the executable; a
+    trusted backend may pass an explicit <code>directory</code> option.</p>
+
+    <h3 id="notifications">Notifications</h3>
+    <div class="codewrap"><pre><code>const app = new App({
+  title: "My App",
+  appId: "com.example.my-app",
+  icon: "assets/app.ico",
+  entry: "index.html"
+});
+
+app.run();
+
+app.showNotification({ title: "My App", message: "Finished loading." });
+app.mainWindow.showNotification({ title: "Download", message: "Complete." });</code></pre><span class="lang">javascript</span></div>
+
+    <p>To request one from the frontend, expose a single narrow command:</p>
+
+    <div class="codewrap"><pre><code>app.command("notification:show", { permission: "notification:show" },
+  ({ title, message }) =&gt; {
+    app.showNotification({ title, message });
+    return true;
+  });</code></pre><span class="lang">javascript</span></div>
+
+    <p>Titles are limited to <strong>63 characters</strong> and messages to <strong>255</strong>.
+    NodeViewJS assigns Windows an explicit identity derived from <code>appId</code>, registers its
+    display name for the current user, and sends notifications through the AUMID-addressed toast API —
+    so notifications and taskbar grouping show your app title instead of
+    <em>Node.js JavaScript Runtime</em>. Keep <code>appId</code> and <code>title</code> stable between
+    releases; Windows caches notification identity by AUMID. Installed apps remove this identity on
+    uninstall.</p>
+
+    <div class="note">
+      <strong>If a notification does not appear</strong>
+      <p>Confirm the app is still running, then check Windows Settings → System → Notifications, Do Not
+      Disturb, and Focus Assist. If the header shows an old name after changing <code>title</code>,
+      keep the same title for that <code>appId</code> or choose a new stable <code>appId</code>.</p>
+    </div>
+
+    <h3 id="ipc-helper">IPC helper</h3>
+    <p>The exported <code>ipc</code> object contains the versioned message parser, serializer,
+    response/event constructors, validation helpers, and protocol limit constants used by the backend
+    runtime. It accepts and returns serialized protocol data; it does not register commands or expose
+    backend privileges. Use <code>app.command()</code>, <code>app.on()</code>, and
+    <code>app.emit()</code> for application IPC — direct <code>ipc</code> use is for protocol adapters
+    and tests that need the runtime's exact validation.</p>
+
+    <!-- ============================================================ -->
+    <h2 id="launch-routing">Single instance, deep links, and file associations</h2>
+
+    <h3 id="single-instance">Single-instance applications</h3>
+    <div class="platforms"><span class="plat win">Windows</span></div>
+
+    <div class="codewrap"><pre><code>const app = new App({
+  appId: "com.example.my-app",
+  entry: "index.html",
+  singleInstance: true
+});
+
+app.on("second-instance", ({ args, cwd }) =&gt; {
+  console.log("Launched again with:", args);
+  console.log("Working directory:", cwd);
+});
+
+const primary = app.run();</code></pre><span class="lang">javascript</span></div>
+
+    <p>The primary <code>app.run()</code> returns <code>true</code>. A duplicate launch returns
+    <code>false</code>, opens no window, forwards its arguments in the background, and exits naturally
+    once delivery finishes.</p>
+
+    <div class="warn">
+      <strong>Do not force-exit the duplicate</strong>
+      <p>Terminating the second process immediately after <code>app.run()</code> interrupts argument
+      delivery.</p>
+    </div>
+
+    <p>The existing primary window is restored and shown before <code>second-instance</code> handlers
+    run. <code>args</code> holds command-line values after the Node entry file, and packaged
+    executables forward their own arguments into the same array. The stable <code>appId</code>
+    identifies the instance lock, and messages are validated and limited to 64 KiB.</p>
+
+    <h3 id="deep-links">Deep links and file associations</h3>
+    <div class="codewrap"><pre><code>const app = new App({
+  appId: "com.example.my-app",
+  entry: "index.html",
+  singleInstance: true,
+  protocols: ["my-app"],
+  fileAssociations: [".myapp"]
+});
+
+app.on("open-url", ({ url, initial }) =&gt; console.log("Open URL:", url, { initial }));
+app.on("open-file", ({ path, initial }) =&gt; console.log("Open file:", path, { initial }));
+
+app.run();</code></pre><span class="lang">javascript</span></div>
+
+    <p><code>initial</code> is <code>true</code> when the URL or file started the primary process and
+    <code>false</code> when it arrived from a later launch. File paths resolve to absolute paths using
+    the launching process's working directory. Use <code>singleInstance: true</code> when later
+    launches should route into the existing app.</p>
+
+    <p>Custom schemes use lowercase letters, numbers, <code>+</code>, <code>.</code>, or
+    <code>-</code>; <code>file</code>, <code>http</code>, <code>https</code>, and <code>mailto</code>
+    cannot be claimed. Extensions must begin with a dot and use lowercase letters, numbers, or hyphens
+    after normalization. Metadata is validated during development and packaging.</p>
+
+    <div class="note">
+      <strong>Registration happens in the installer</strong>
+      <p>Portable folders do not modify Windows registration by themselves. The per-user installer
+      performs registration and removes it on uninstall.</p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2 id="packaging">Packaging</h2>
+
+    <h3 id="windows-portable">Windows portable folder</h3>
+    <div class="codewrap"><pre><code>npm run package</code></pre><span class="lang">powershell</span></div>
+
+    <p>The top-level portable folder contains only the executable and <code>resources/</code>:</p>
+
+    <div class="codewrap"><pre><code>NodeViewDemo/
+  NodeViewDemo.exe
+  resources/
+    app/
+      app.js
+      index.html
+      __nodeview/
+        bridge.js
+    runtime/
+      node.exe
+      nodeview.js
+      apply-update.ps1
+      nodeview.node
+    integrity.manifest</code></pre><span class="lang">text</span></div>
+
+    <p>The generated exe starts the bundled Node runtime without a console window, waits for the app
+    process, and writes runtime output to <code>resources/&lt;AppName&gt;.log</code>. The editable
+    runtime stays split into modules in the source project; packaging combines them into one bundled
+    <code>nodeview.js</code>.</p>
+
+    <h4>Integrity verification</h4>
+    <p>The manifest records every app and runtime file's path, size, and SHA-256 digest, and is
+    embedded byte-for-byte into the launcher. Before Node starts, the launcher rejects manifest
+    changes, missing or extra files, reparse points, path escapes, size changes, and digest mismatches.
+    The runtime log is the only permitted unlisted resource file.</p>
+
+    <h4>Secret protection</h4>
+    <p>Packaging always excludes <code>node_modules</code>, <code>.git</code>,
+    <code>.nodeview-webview</code>, <code>build</code>, <code>.env</code> and <code>.env.*</code>,
+    <code>.npmrc</code>, <code>.pypirc</code>, private-key and credential files
+    (<code>*.pem</code>, <code>*.key</code>, <code>*.pfx</code>, <code>*.p12</code>,
+    <code>credentials.json</code>, <code>service-account*.json</code>), and JavaScript source maps
+    (<code>*.map</code>).</p>
+    <p>Text inputs up to 1 MiB are scanned for common private-key, access-key, token, and
+    credential-assignment patterns. Warnings identify only the file and pattern category — they never
+    print the matched value.</p>
+
+    <h3 id="exe-metadata">Exe metadata and icon</h3>
+    <p>Windows exe metadata is compiled into the launcher during <code>npm run build</code>, so set it
+    then rebuild:</p>
+
+    <div class="codewrap"><pre><code>"nodeviewjs": {
+  "metadata": {
+    "companyName": "My Company",
+    "fileDescription": "My App",
+    "productName": "My App",
+    "fileVersion": "1.0.0",
+    "productVersion": "1.0.0",
+    "copyright": "Copyright (C) 2026 My Company"
+  }
+}</code></pre><span class="lang">json</span></div>
+
+    <div class="codewrap"><pre><code>npm run build
+npm run package</code></pre><span class="lang">powershell</span></div>
+
+    <p>Metadata is separate from code signing — unsigned executables can still trigger SmartScreen
+    warnings.</p>
+
+    <p>For the icon, set <code>icon</code> plus <code>include</code>, then read the packaged path from
+    the environment in your entry file:</p>
+
+    <div class="codewrap"><pre><code>const app = new App({
+  title: "My App",
+  icon: process.env.NODEVIEW_APP_ICON,
+  entry: path.join(__dirname, "index.html")
+});</code></pre><span class="lang">javascript</span></div>
+
+    <p><code>nodeviewjs package</code> copies the icon into <code>resources/app</code> and sets
+    <code>NODEVIEW_APP_ICON</code> before your app code runs. The same icon is embedded in the
+    generated <code>.exe</code>.</p>
+
+    <h3 id="windows-installer">Windows installer</h3>
+    <div class="codewrap"><pre><code>npm run package:installer
+# or from an app project
+npx nodeviewjs installer</code></pre><span class="lang">powershell</span></div>
+
+    <p>Output lands in <code>build/installer/&lt;AppName&gt;-&lt;version&gt;-setup.exe</code>. The
+    installer installs for the current user under
+    <code>%LOCALAPPDATA%\Programs\&lt;AppName&gt;</code>, creates a Start Menu shortcut, registers
+    configured protocols and file types, and registers an uninstaller in Windows Installed Apps.
+    <strong>Administrator access is not required.</strong></p>
+
+    <p>Association registration refuses to replace a protocol or app-specific file handler owned by
+    another application, and uninstallation removes only registrations still owned by the installed
+    executable. Installer replacement is transactional — existing files are restored if extraction or
+    registration fails.</p>
+
+    <h3 id="macos-package">macOS app and DMG</h3>
+    <div class="codewrap"><pre><code>npm run package
+# or
+npx nodeviewjs package</code></pre><span class="lang">bash</span></div>
+
+    <p>Produces <code>build/macos/&lt;AppName&gt;.app</code> and a compressed
+    <code>build/macos/&lt;AppName&gt;.dmg</code>. The bundle contains a native Mach-O launcher, bundled
+    Node runtime, native addon, runtime JavaScript, and app assets; the DMG includes the app and an
+    Applications shortcut. Packaging uses <code>nodeviewjs.appId</code> as
+    <code>CFBundleIdentifier</code> and <code>nodeviewjs.macIcon</code> for an optional
+    <code>.icns</code>.</p>
+
+    <div class="tablewrap">
+    <table>
+      <thead><tr><th>Environment variable</th><th>Effect</th></tr></thead>
+      <tbody>
+        <tr><td><code>NODEVIEW_MAC_SIGN_IDENTITY</code></td><td>Developer ID Application identity used to sign the launcher, Node runtime, addon, and app with hardened-runtime options.</td></tr>
+        <tr><td><code>NODEVIEW_MAC_NOTARY_PROFILE</code></td><td>Configured <code>notarytool</code> keychain profile used to submit and staple the signed app before its DMG is generated.</td></tr>
+      </tbody>
+    </table>
+    </div>
+
+    <h3 id="linux-package">Linux portable folder</h3>
+    <div class="codewrap"><pre><code>npm run package
+# or
+npx nodeviewjs package</code></pre><span class="lang">bash</span></div>
+
+    <p>Creates <code>build/linux/&lt;AppName&gt;/</code> with one executable and one
+    <code>resources/</code> directory, bundling the Node runtime, native addon, runtime JavaScript, and
+    app files. The target system still needs compatible GTK 3 and WebKitGTK 4.1 runtime libraries.</p>
+
+    <h3 id="signing">Windows code signing</h3>
+    <p>Installers are unsigned by default. To sign the portable executable and installer with the
+    Windows SDK <code>signtool.exe</code>:</p>
+
+    <div class="tablewrap">
+    <table>
+      <thead><tr><th>Environment variable</th><th>Effect</th></tr></thead>
+      <tbody>
+        <tr><td><code>NODEVIEW_SIGN_CERTIFICATE</code></td><td>Path to a PFX certificate.</td></tr>
+        <tr><td><code>NODEVIEW_SIGN_PASSWORD</code></td><td>Optional password for that PFX.</td></tr>
+        <tr><td><code>NODEVIEW_SIGN_THUMBPRINT</code></td><td>Alternative to the PFX path — certificate thumbprint from the store.</td></tr>
+        <tr><td><code>NODEVIEW_SIGN_TIMESTAMP_URL</code></td><td>Adds an RFC 3161 timestamp.</td></tr>
+      </tbody>
+    </table>
+    </div>
+
+    <p>Packaging embeds the integrity manifest <em>before</em> Authenticode signing, so the signature
+    protects the launcher trust anchor. Signed update metadata then authenticates the complete
+    installer containing that launcher/resources pair.</p>
+
+    <div class="warn">
+      <strong>Keep signing material out of the repository</strong>
+      <p>Private keys, PFX files, and release credentials are intentionally external to the project and
+      must stay out of CI logs.</p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2 id="updates">Signed auto-updates</h2>
+
+    <p>Update manifests use Ed25519 signatures and bind the app id, semantic version, HTTPS installer
+    URL, byte size, and SHA-256 digest. Keep the private key outside the project and ship only its
+    public key in the app.</p>
+
+    <p>After building an installer, generate <code>build/installer/update.json</code>:</p>
+
+    <div class="codewrap"><pre><code>$env:NODEVIEW_UPDATE_PRIVATE_KEY = "C:\secure\my-app-update-private.pem"
+npx nodeviewjs update-manifest https://updates.example.com/MyApp-1.2.0-setup.exe</code></pre><span class="lang">powershell</span></div>
+
+    <p>Upload the manifest and installer to HTTPS endpoints, then wire the updater into the backend:</p>
+
+    <div class="codewrap"><pre><code>const { App, Updater } = require("nodeviewjs");
+
+const app = new App({
+  title: "My App",
+  appId: "com.example.my-app",
+  entry: "index.html"
+});
+
+const updater = new Updater({
+  appId: process.env.NODEVIEW_APP_ID,
+  currentVersion: process.env.NODEVIEW_APP_VERSION,
+  manifestUrl: "https://updates.example.com/update.json",
+  publicKey: `-----BEGIN PUBLIC KEY-----
+...
+-----END PUBLIC KEY-----`
+});
+
+async function updateNow() {
+  const update = await updater.checkForUpdates();
+  if (!update) return false;
+  await updater.downloadUpdate(update);
+  await updater.installAndRestart(app);
+  return true;
+}
+
+app.run();
+updateNow().catch((error) =&gt; {
+  console.error("Update failed:", error);
+});</code></pre><span class="lang">javascript</span></div>
+
+    <p>Checks reject unsigned metadata, wrong app identities, non-HTTPS URLs, downgrades, unexpected
+    fields, oversized responses, and mismatched installer bytes. Downloads stage under
+    <code>%LOCALAPPDATA%\NodeViewJS\Updates</code>; installation waits for the app and launcher to
+    exit, re-verifies the installer, applies it quietly, and restarts the app.</p>
+
+    <h4>Updater events</h4>
+    <p><code>checking</code> · <code>update-available</code> · <code>update-not-available</code> ·
+    <code>update-downloaded</code> · <code>update-installing</code> · <code>updater-error</code></p>
+
+    <!-- ============================================================ -->
+    <h2 id="security">Security model</h2>
+
+    <p>NodeViewJS deliberately avoids exposing Node.js to the frontend.</p>
+
+    <div class="codewrap"><pre><code>// Never do this
+window.require = require;</code></pre><span class="lang">javascript</span></div>
+
+    <div class="codewrap"><pre><code>// Do this instead
+app.command("loadData", async payload =&gt; {
+  // validate payload here
+  return result;
+});</code></pre><span class="lang">javascript</span></div>
+
+    <h3 id="navigation-boundary">Navigation and resource boundary</h3>
+    <p>Top-level navigation is restricted to local files inside the configured <code>entry</code>
+    file's directory. Remote URLs and local files outside that directory are blocked and logged to
+    stderr.</p>
+
+    <p>On Windows, the entry directory is mapped in memory to
+    <code>https://app.nodeview.example/</code> inside that web view instance. It does <strong>not</strong>
+    register DNS, edit the hosts file, open a port, contact a server, or persist after the web view
+    closes. The mapping avoids Chromium's unique <code>file:</code> origin warnings while retaining
+    canonical app-root checks and deny-CORS resource access.</p>
+
+    <p>Windows permits web view resources only from the local app root. Remote fetches, images,
+    scripts, and frame content receive blocked responses; popups, downloads, permission prompts,
+    external URI schemes, and packaged DevTools are denied.</p>
+
+    <h3 id="trusted-document">Trusted document checks</h3>
+    <div class="platforms"><span class="plat win">Windows</span></div>
+    <p><code>window.NodeViewJS</code> is created only in the top-level document. Native IPC verifies
+    that each message came from the current canonical local document under the configured app root, so
+    child frames, outside-root files, unexpected origins, and stale pages cannot invoke backend
+    commands or emit backend events.</p>
+
+    <h3 id="ipc-limits">IPC enforcement</h3>
+    <p>IPC requires protocol version 1 and exact message schemas. Messages are limited to 256 KiB, 32
+    levels, 10,000 payload nodes, and 128-character names; each window allows 64 active calls, applies
+    a 30-second timeout, and rejects duplicate or recently replayed request IDs. Windows enforces the
+    limits at the native forwarding boundary as well as in JavaScript.</p>
+
+    <h3 id="limitations">Known limitations</h3>
+    <ul>
+      <li>NodeViewJS is <strong>not</strong> an operating-system sandbox for backend code or plugins.</li>
+      <li>Plugins are trusted code once admitted.</li>
+      <li>Applications must validate command-specific payload semantics and user authorization themselves.</li>
+      <li>Packaged Windows applications disable DevTools.</li>
+      <li>WebView2 may initiate a remote frame request before cancellation, although response content is blocked — <strong>never place secrets in remote frame URLs</strong>.</li>
+      <li>macOS and Linux do not yet match Windows on trusted-document checks, capability lockdown, native IPC limits, package containment, integrity, and the security release gate.</li>
+      <li>Code signing and notarization depend on external release credentials.</li>
+      <li>Payloads are JSON-style data, not arbitrary JavaScript objects or Node.js values.</li>
+      <li><code>emit()</code> is one-way and does not acknowledge completion.</li>
+      <li>IPC and readiness queues are deliberately bounded.</li>
+    </ul>
+
+    <p>The authoritative security limitations live in <code>SECURITY.md</code>; roadmap work is tracked
+    in <code>PLAN.md</code>.</p>
+
+    <!-- ============================================================ -->
+    <h2 id="contributing">Working on NodeViewJS itself</h2>
+
+    <p>Clone the repository, then:</p>
+    <div class="codewrap"><pre><code>npm install
+npm run setup
+npm run build
+npm start          # run the example app
+npm run dev        # run it with DevTools</code></pre><span class="lang">powershell</span></div>
+
+    <p>The platform-aware <code>scripts/build.js</code> entrypoint prepares WebView2 SDK files on
+    Windows, generates the native bridge header from <code>runtime/bridge.js</code>, builds the native
+    addon and launcher, and stages outputs into <code>build/nodeview/</code>. Build outputs are
+    gitignored.</p>
+
+    <h3 id="structure">Project structure</h3>
+    <div class="codewrap"><pre><code>nodeviewjs/
+  bin/nodeviewjs.js         CLI entrypoint
+  examples/basic/           demo app (app.js, index.html)
+  runtime/                  app, bridge, ipc, native, helpers
+  scripts/                  build, packaging, security scanning
+  src-nodeview/             C++ addon and launcher (Windows/macOS/Linux)
+  test/                     unit, integration, and security suites
+  wiki/                     task-focused documentation
+  docs/index.html           this guide</code></pre><span class="lang">text</span></div>
+
+    <h3 id="testing">Testing</h3>
+
+    <div class="tablewrap">
+    <table>
+      <thead><tr><th>Command</th><th>Covers</th></tr></thead>
+      <tbody>
+        <tr><td><code>npm test</code></td><td>Runtime APIs, logging, IPC validation, updater, plugins, platform boundaries, single instance, associations, bundle surface, menus, taskbar, colors, notifications, bridge embedding, package inputs, integrity, and CLI.</td></tr>
+        <tr><td><code>npm run test:native</code></td><td>Live bridge suite, raw WebMessage diagnostic, IPC security integration, trusted document, web view capabilities, multi-window.</td></tr>
+        <tr><td><code>npm run test:native-ui</code></td><td>Native menu, tray menu, taskbar, and notification integrations (Windows).</td></tr>
+        <tr><td><code>npm run test:full</code></td><td>All of the above in one pass (Windows).</td></tr>
+        <tr><td><code>npm run security:gate</code></td><td>Repository and package-surface scanning, dependency audit, warning-as-error MSVC analysis, PE hardening, malformed-input corpus, package tamper checks, and installer smoke.</td></tr>
+        <tr><td><code>npm run security:repo</code></td><td>Repository/package-surface secret and hidden-character scan only.</td></tr>
+        <tr><td><code>npm run test:installer</code></td><td>Per-user package, install, launch, replacement, rollback, and uninstall smoke test.</td></tr>
+      </tbody>
+    </table>
+    </div>
+
+    <div class="note">
+      <strong>Run native tests from a real desktop session</strong>
+      <p>Live integration tests open native web view windows briefly. Restricted or headless shells can
+      prevent them from initializing or delivering messages.</p>
+    </div>
+
+    <p>Run <code>npm run security:gate</code> before any Windows release, and follow
+    <code>SECURITY-CHECKLIST.md</code> for signing and privileged-API review.</p>
+
+    <h3 id="platform-help">Help test macOS and Linux</h3>
+    <p>Independent macOS and Linux reports are welcome. Follow <code>PLATFORM-TESTING.md</code> for the
+    priority environment matrix, exact commands, manual package checks, completion criteria, and safe
+    reporting requirements. Submit results in an issue titled
+    <code>[Platform test]: &lt;platform and version&gt;</code>. General contribution expectations are in
+    <code>CONTRIBUTING.md</code>.</p>
+
+    <!-- ============================================================ -->
+    <h2 id="troubleshooting">Troubleshooting</h2>
+
+    <h3 id="ts-vs">node-gyp cannot find Visual Studio</h3>
+    <p>Install Visual Studio Build Tools 2022 including the <em>Desktop development with C++</em>
+    workload. Visual Studio 2017 is not sufficient for newer Node versions — Node.js 25, for example,
+    requires a newer supported MSVC toolchain.</p>
+
+    <h3 id="ts-python">node-gyp cannot find Python</h3>
+    <div class="codewrap"><pre><code>winget install Python.Python.3.12
+$env:PYTHON = "C:\Path\To\Python\python.exe"
+npm run build</code></pre><span class="lang">powershell</span></div>
+
+    <h3 id="ts-webview2">WebView2 initialization fails</h3>
+    <p>Confirm the Microsoft Edge WebView2 Runtime is installed, and that
+    <code>%LOCALAPPDATA%\NodeViewJS</code> is writable — WebView2 stores its per-app profile there.</p>
+
+    <h3 id="ts-closes">Portable app opens and closes immediately</h3>
+    <p>Check the launcher log:</p>
+    <div class="codewrap"><pre><code>build/portable/NodeViewDemo/resources/NodeViewDemo.log</code></pre><span class="lang">text</span></div>
+    <p>The file is named after the app, so a renamed package writes <code>resources/MyApp.log</code>.
+    Structured backend errors also go to
+    <code>%LOCALAPPDATA%\NodeViewJS\Logs\&lt;app-id&gt;-&lt;hash&gt;\backend.log</code>; set
+    <code>NODEVIEW_LOG_PATH</code> before launching to capture that at a known path.</p>
+
+    <h3 id="ts-entry">App entry file cannot be loaded</h3>
+    <p>Use an absolute or correctly resolved local file path:</p>
+    <div class="codewrap"><pre><code>entry: path.join(__dirname, "index.html")</code></pre><span class="lang">javascript</span></div>
+
+    <h3 id="ts-startup">Slow startup</h3>
+    <p>Keep app startup work light before <code>app.run()</code>, avoid scanning large folders during
+    launch, and lazy-load heavy data after the window is visible. Set
+    <code>startupTiming: true</code> to measure.</p>
+
+    <!-- ============================================================ -->
+    <h2 id="command-index">Command index</h2>
+
+    <div class="codewrap"><pre><code>npm run build                # build native addon and launcher
+npm start                    # run the example app
+npm run dev                  # run with DevTools and live reload
+npm test                     # unit, packaging, and CLI suites
+npm run test:full            # everything, including native (Windows)
+npm run security:gate        # pre-release security gate
+npm run package              # portable folder / .app+DMG / Linux folder
+npm run package:installer    # per-user Windows installer
+npm run package:macos        # macOS bundle explicitly
+npm run package:linux        # Linux folder explicitly
+npm run update:manifest -- https://updates.example.com/MyApp-1.2.0-setup.exe
+
+npx nodeviewjs create MyApp
+npx nodeviewjs package
+npx nodeviewjs installer
+npx nodeviewjs update-manifest https://updates.example.com/MyApp-1.2.0-setup.exe</code></pre><span class="lang">powershell</span></div>
+
+    <hr>
+    <p style="color:var(--muted); font-size:.875rem">
+      NodeViewJS is MIT licensed. This guide is generated from the repository's
+      <code>README.md</code>, <code>SECURITY.md</code>, and <code>wiki/</code> documentation —
+      those files remain authoritative if anything here drifts.
+    </p>
+
+  </div>
+  </main>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ---------- theme ---------- */
+  var root = document.documentElement;
+  var stored = null;
+  try { stored = localStorage.getItem("nvjs-theme"); } catch (e) {}
+  if (stored === "light" || stored === "dark") root.setAttribute("data-theme", stored);
+
+  function currentTheme() {
+    var explicit = root.getAttribute("data-theme");
+    if (explicit) return explicit;
+    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  }
+  function toggleTheme() {
+    var next = currentTheme() === "dark" ? "light" : "dark";
+    root.setAttribute("data-theme", next);
+    try { localStorage.setItem("nvjs-theme", next); } catch (e) {}
+  }
+  ["themetoggle", "themetoggle-m"].forEach(function (id) {
+    var el = document.getElementById(id);
+    if (el) el.addEventListener("click", toggleTheme);
+  });
+
+  /* ---------- mobile nav ---------- */
+  var sidebar = document.getElementById("sidebar");
+  var menubtn = document.getElementById("menubtn");
+  if (menubtn) {
+    menubtn.addEventListener("click", function () { sidebar.classList.toggle("open"); });
+  }
+
+  /* ---------- table of contents ---------- */
+  var toc = document.getElementById("toc");
+  var headings = document.querySelectorAll(".content h2[id], .content h3[id]");
+  var links = [];
+
+  headings.forEach(function (h) {
+    var li = document.createElement("li");
+    var a = document.createElement("a");
+    a.href = "#" + h.id;
+    a.textContent = h.textContent;
+    if (h.tagName === "H3") a.className = "lvl3";
+    a.addEventListener("click", function () { sidebar.classList.remove("open"); });
+    li.appendChild(a);
+    toc.appendChild(li);
+    links.push({ a: a, li: li, h: h });
+  });
+
+  /* ---------- scrollspy ---------- */
+  var active = null;
+  function spy() {
+    var best = null;
+    var bestTop = -Infinity;
+    for (var i = 0; i < links.length; i++) {
+      var top = links[i].h.getBoundingClientRect().top;
+      if (top <= 120 && top > bestTop) { bestTop = top; best = links[i]; }
+    }
+    if (!best) best = links[0];
+    if (best && best.a !== active) {
+      if (active) active.classList.remove("active");
+      active = best.a;
+      active.classList.add("active");
+      var box = active.getBoundingClientRect();
+      var navBox = sidebar.getBoundingClientRect();
+      if (box.top < navBox.top || box.bottom > navBox.bottom) {
+        active.scrollIntoView({ block: "nearest" });
+      }
+    }
+  }
+  var ticking = false;
+  window.addEventListener("scroll", function () {
+    if (ticking) return;
+    ticking = true;
+    requestAnimationFrame(function () { spy(); ticking = false; });
+  }, { passive: true });
+  spy();
+
+  /* ---------- nav filter ---------- */
+  var search = document.getElementById("navsearch");
+  search.addEventListener("input", function () {
+    var q = search.value.trim().toLowerCase();
+    links.forEach(function (item) {
+      var hit = !q || item.a.textContent.toLowerCase().indexOf(q) !== -1;
+      item.li.classList.toggle("toc-hidden", !hit);
+    });
+  });
+
+  /* ---------- copy buttons ---------- */
+  document.querySelectorAll(".codewrap").forEach(function (wrap) {
+    var pre = wrap.querySelector("pre");
+    if (!pre) return;
+    var btn = document.createElement("button");
+    btn.className = "copybtn";
+    btn.type = "button";
+    btn.textContent = "Copy";
+    btn.addEventListener("click", function () {
+      var text = pre.innerText;
+      var done = function () {
+        btn.textContent = "Copied";
+        setTimeout(function () { btn.textContent = "Copy"; }, 1400);
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done, function () { btn.textContent = "Failed"; });
+      } else {
+        var ta = document.createElement("textarea");
+        ta.value = text;
+        document.body.appendChild(ta);
+        ta.select();
+        try { document.execCommand("copy"); done(); } catch (e) { btn.textContent = "Failed"; }
+        document.body.removeChild(ta);
+      }
+    });
+    wrap.appendChild(btn);
+  });
+})();
+</script>
+</body>
+</html>
