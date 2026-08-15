@@ -1170,6 +1170,7 @@ Current permission names:
 - `shell:open`
 - `notification:show`
 - `window:control`
+- `net:fetch`
 
 ### Shell API
 
@@ -1199,6 +1200,57 @@ app.command("showExport", {
 `shell.openExternal(url)` accepts only absolute `http:`, `https:`, and `mailto:` URLs without embedded credentials. `shell.openPath(path)` resolves the path and rejects it unless the file or directory already exists. Both methods return `true` after Windows accepts the launch request and throw a descriptive error otherwise.
 
 The `shell` helper is trusted backend code and is not exposed directly to the WebView. Frontend access must go through a registered command with the `shell:open` permission. NodeViewJS does not provide an arbitrary command or shell-execution method.
+
+### Network API
+
+The WebView cannot reach the network directly: remote fetches, images, scripts, and frame content are blocked. To call an HTTP API, grant the `net:fetch` permission, list the origins the app may reach, and expose a command that performs the request in the backend.
+
+```js
+const { App } = require("nodeviewjs");
+
+const app = new App({
+  entry: "index.html",
+  permissions: ["net:fetch"],
+  allowedOrigins: ["https://api.example.com"]
+});
+
+app.command("api:get", { permission: "net:fetch" }, async ({ path }) => {
+  if (typeof path !== "string" || !path.startsWith("/")) {
+    throw new TypeError("path must start with /.");
+  }
+  const response = await app.fetch({
+    url: `https://api.example.com${path}`,
+    headers: { accept: "application/json" }
+  });
+  if (!response.ok) throw new Error(`API returned ${response.status}`);
+  return JSON.parse(response.body);
+});
+```
+
+```js
+const data = await NodeViewJS.invoke("api:get", { path: "/v1/items" });
+```
+
+`allowedOrigins` accepts origins only, with no path, query, or fragment. Both `http` and `https` are accepted, including private and internal addresses such as `http://localhost:3000` or `http://192.168.1.50:8080`, because listing an origin is the deliberate act that grants it. Other schemes are rejected. At most 32 entries are allowed. An app with no `allowedOrigins` cannot make requests at all.
+
+Prefer `https` for anything leaving the machine: plain `http` is unencrypted, and NodeViewJS does not upgrade it.
+
+`app.fetch(options)` binds the app's allowlist, so a command cannot widen it. It returns `{ url, status, ok, headers, body }` where `body` is text; parse JSON yourself. Options are `url`, `method`, `headers`, `body`, `timeoutMs`, and `maxResponseBytes`.
+
+The request is validated before it leaves the process:
+
+- Only `GET`, `HEAD`, `POST`, `PUT`, `PATCH`, and `DELETE` are accepted.
+- URLs are capped at 2048 characters and must not contain credentials.
+- The origin must match `allowedOrigins` exactly.
+- Redirects are resolved manually and each hop is re-checked against the allowlist, so an allowed origin cannot hand the request to another host, including internal addresses. At most three redirects are followed.
+- `Host`, `Cookie`, `Content-Length`, `Connection`, and other transport or credential headers cannot be set by the caller. Header names and values are pattern-checked and length-bounded, so a header value cannot inject a second header.
+- Request bodies are limited to 1 MiB and must be strings.
+- Responses are bounded to 8 MiB by counting bytes as they arrive rather than trusting `content-length`, and time out after 30 seconds by default.
+- `set-cookie` is stripped from the response headers.
+
+Because `net:fetch` is an ordinary permission, it supports scopes such as `net:fetch:reports` and the `net:*` group, and a window policy can narrow it for less-trusted views.
+
+Two limits are worth stating plainly. When a backend command builds a request entirely from its own constants, the global `fetch()` is equivalent and simpler; `app.fetch()` earns its place when any part of the request comes from the frontend. And `allowedOrigins` constrains code that goes through `app.fetch()` or `net.request()`; it is not a sandbox, because backend code and plugins are trusted and can reach the network directly. The enforced boundary is `net:fetch`, which decides whether the WebView can reach the network at all.
 
 ### Clipboard API
 

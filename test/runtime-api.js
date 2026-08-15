@@ -37,6 +37,7 @@ assert.deepEqual(Object.keys(runtime).sort(), [
   "config",
   "dialog",
   "ipc",
+  "net",
   "notification",
   "shell"
 ]);

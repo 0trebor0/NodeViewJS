@@ -18,6 +18,8 @@ const {
   normalizeMenuTemplate,
   normalizeTrayMenuTemplate
 } = require("./menu");
+const net = require("./net");
+const { normalizeAllowedOrigins } = net;
 const { normalizeNotificationOptions } = require("./notification");
 const { SingleInstanceCoordinator } = require("./single-instance");
 const { normalizeAttentionType, normalizeOverlay, normalizeProgress } = require("./taskbar");
@@ -32,7 +34,8 @@ const COMMAND_PERMISSIONS = new Set([
   "clipboard:write",
   "shell:open",
   "notification:show",
-  "window:control"
+  "window:control",
+  "net:fetch"
 ]);
 const PERMISSION_GROUPS = new Set(
   [...COMMAND_PERMISSIONS].map((permission) => `${permission.split(":", 1)[0]}:*`)
@@ -317,6 +320,7 @@ function resolveWindowOptions(options, fallback = {}, owner = "Window") {
       ?? (!packaged && process.env.NODEVIEW_STARTUP_TIMING === "1"),
     singleInstance,
     permissionPolicy,
+    allowedOrigins: normalizeAllowedOrigins(options.allowedOrigins ?? fallback.allowedOrigins),
     menu,
     icon: icon && path.resolve(icon),
     entry: path.resolve(entry),
@@ -734,6 +738,16 @@ class App {
 
   get plugins() {
     return [...this.#plugins.values()].map((record) => record.metadata);
+  }
+
+  // Performs a validated outbound request against this app's allowedOrigins.
+  // Register it behind a net:fetch command so the frontend cannot choose the
+  // destination beyond what the allowlist already permits.
+  fetch(options = {}) {
+    if (!options || typeof options !== "object" || Array.isArray(options)) {
+      throw new TypeError("Request options must be an object.");
+    }
+    return net.request({ ...options, allowedOrigins: this.options.allowedOrigins });
   }
 
   createWindow(options = {}) {
