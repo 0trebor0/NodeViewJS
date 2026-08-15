@@ -44,6 +44,8 @@ repository.
 
 ## Files created
 
+- `runtime/net.js` — validated outbound HTTP for backend commands.
+- `test/net.js` — network permission, allowlist, and SSRF tests.
 - `docs/index.html` — single-page project guide.
 - `setup.bat` — Windows prerequisite installer using `winget`.
 - `TASK_PROGRESS.md` — this file.
@@ -92,6 +94,14 @@ None.
 
 ## Tests added or updated
 
+- `test/net.js`: origin allowlist normalization; rejection of non-https,
+  pathful, credentialed, and over-count origins; URL, method, header, body,
+  timeout, and response-size validation; header-injection and forbidden-header
+  rejection; private and link-local address refusal; live loopback server
+  covering success, off-allowlist redirect refusal, in-allowlist redirect
+  following, redirect-loop termination, response-size ceiling, timeout,
+  non-2xx passthrough, and `set-cookie` stripping; `net:fetch` enforcement at
+  invoke time, scoped grants, and `app.fetch()` binding the app allowlist.
 - `test/runtime-api.js`: config file-name length limit — an over-long name is
   rejected with a clear error, and a 250-character name is still accepted.
 - `test/runtime-api.js`: closed-window event handling — `isClosed` state,
