@@ -90,6 +90,16 @@ npm run build
 
 ## Install dependencies
 
+On Windows, `setup.bat` installs any missing prerequisite through `winget` and then runs `npm install`:
+
+```powershell
+.\setup.bat
+```
+
+It checks Node.js 20 or newer, Python 3, the Visual Studio 2022 Desktop development with C++ workload, and the Microsoft Edge WebView2 Runtime, and installs only what is missing. Use `.\setup.bat /check` to report what is missing without changing anything, or `.\setup.bat /deps` to install prerequisites without running `npm install`. Open a new terminal after anything is installed so `PATH` updates are visible.
+
+To install manually, or on macOS and Linux:
+
 ```powershell
 npm install
 npm run setup

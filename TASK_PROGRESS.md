@@ -45,6 +45,7 @@ repository.
 ## Files created
 
 - `docs/index.html` — single-page project guide.
+- `setup.bat` — Windows prerequisite installer using `winget`.
 - `TASK_PROGRESS.md` — this file.
 
 ## Files modified
@@ -97,6 +98,14 @@ None.
   pre-`run()` buffering still permitted, `AppWindow.emit()` throws on a closed
   window, `app.emit()` skips closed windows and still reaches open ones
   (asserted with delivery counters), and repeated `close()` stays harmless.
+
+## Not verified
+
+- `setup.bat` detection was confirmed against a machine where every
+  prerequisite is already present, and the argument handling and usage paths
+  were exercised. The `winget install` branches were not executed, because
+  doing so would install software on this machine. They remain unverified on
+  a machine that is actually missing a prerequisite.
 
 ## Tests run and results
 

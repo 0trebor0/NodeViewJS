@@ -4,6 +4,7 @@
 
 ### Added
 
+- `setup.bat` installs missing Windows prerequisites through `winget` and then runs `npm install`. It checks Node.js 20 or newer, Python 3, the Visual Studio 2022 Desktop development with C++ workload, and the Microsoft Edge WebView2 Runtime, installing only what is absent. `/check` reports status without changing anything and `/deps` skips the project install.
 - `AppWindow.isClosed` reports whether a window has been closed. It is distinct from `!isOpen`: a window that has not been opened yet is not closed, so it still buffers events emitted before `app.run()`.
 - `npm run test:native`, `npm run test:native-ui`, and `npm run test:full` group the native and WebView suites that previously had no aggregate runner.
 - `docs/index.html` is a complete single-page project guide covering setup, CLI, the frontend bridge, the backend API, packaging, updates, security, and troubleshooting.
