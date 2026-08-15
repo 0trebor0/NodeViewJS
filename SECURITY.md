@@ -40,6 +40,7 @@ Packaged local HTML, CSS, and JavaScript are application code, but they remain u
 - Only registered commands can be invoked from the frontend.
 - Command permission requirements are checked before handlers run; app policies are the maximum grant, per-window policies can narrow access, and deny rules take precedence.
 - Native shell execution is not exposed. External URLs and paths use constrained backend helpers.
+- The WebView cannot reach the network. Outbound HTTP is available only to backend commands holding the `net:fetch` permission, and `app.fetch()` restricts destinations to the application's configured `allowedOrigins`. Request URLs are length-bounded and may not carry credentials; redirects are resolved manually and re-checked against the allowlist on every hop; transport and credential headers cannot be set by the caller; request bodies, response size, and request duration are bounded, with the response ceiling counted from bytes actually received rather than a declared `content-length`; and `set-cookie` is stripped from responses.
 - Top-level navigation is restricted to local files under the configured entry directory.
 - On Windows, the bridge exists only in the top-level frame and native IPC requires the sender, current source, and active trusted document to resolve to the same canonical local file under the app root.
 - Windows WebView2 allows local app-root resources and denies remote resource responses, remote or outside-root frame content, popups, downloads, permission requests, external URI schemes, and DevTools in packaged apps.
@@ -55,6 +56,8 @@ Packaged local HTML, CSS, and JavaScript are application code, but they remain u
 
 - NodeViewJS is not an operating-system sandbox for backend code or plugins.
 - The current permission model does not restrict what trusted backend code can do after it is loaded.
+- `allowedOrigins` constrains code that calls `app.fetch()` or `net.request()`. It is not a network sandbox: backend code and plugins are trusted and can reach any host directly. The enforced boundary is `net:fetch`, which decides whether the WebView can cause a request at all.
+- Origin allowlisting matches the configured origin, not the address it resolves to, so it does not defend against DNS rebinding. Treat a listed origin as trusted for the lifetime of the application.
 - Applications are responsible for validating command payload semantics and authorizing actions for their own users.
 - WebView2 can initiate a remote frame request before native cancellation, although the response is replaced and its content cannot execute. Do not put secrets in remote frame URLs.
 - macOS and Linux capability-lockdown parity is deferred; do not mix remote content with privileged pages on those hosts.
@@ -79,6 +82,7 @@ These limitations are tracked in the Security-First Queue in `PLAN.md`. They sho
 | Backend command | Valid IPC carries dangerous application-specific payload | Handler is explicit, may declare permissions, and receives only structurally bounded JSON | Application responsibility for command-specific semantic validation |
 | Plugin to backend | Plugin registers undeclared privileged commands | Explicit loading, declared permissions, transactional setup, namespacing | `test/plugins.js` |
 | Shell and clipboard | Frontend reaches privileged OS helpers directly | Helpers remain backend-only and require registered command routing | `test/runtime-api.js`, `test/platform.js`, `test/native-lifecycle.js` |
+| Outbound network | Frontend causes a request to an unintended host, or an allowed host redirects the request inward | `net:fetch` permission, exact-origin allowlist applied to the initial URL and every redirect hop, redirect cap, method and header allowlists, and bounded body, response, and duration | `test/net.js`; allowlisting does not address DNS rebinding, and backend code can bypass the helper |
 | Local navigation | Page navigates outside its application root | Root-bound navigation policy and cancellation | `test/bridge-integration.js`, `test/multi-window-integration.js`; cross-host canonicalization remains part of SEC-02 |
 | Package input | Include path, link/reparse point, traversal, collision, or secret escapes package policy | Windows canonical containment, safe destinations, link rejection, default secret exclusions, and redacted warnings | `test/package-input-security.js`, `test/cli.js`; macOS/Linux parity deferred |
 | Packaged integrity | Backend, HTML, bridge, runtime, addon, Node, or manifest is changed after packaging | Windows launcher-embedded deterministic manifest plus canonical SHA-256 verification before Node startup | `test/package-integrity.js`, `test/cli.js`; Authenticode protects the launcher anchor, macOS/Linux parity deferred |
@@ -93,6 +97,7 @@ These limitations are tracked in the Security-First Queue in `PLAN.md`. They sho
 - Grant only the permissions required by registered commands. Prefer scoped permissions and explicit deny rules.
 - Never expose `require`, `process`, filesystem objects, native handles, arbitrary evaluation, or command execution to frontend code.
 - Keep remote content in an unprivileged browser context. Do not place remote frames inside a window that can invoke privileged commands.
+- List only the origins an application actually needs in `allowedOrigins`, prefer `https`, and never build a request URL by concatenating frontend input into the host portion. Pass the frontend only the parts of a request it needs to influence, such as a path segment or query value, and validate them in the command.
 - Keep update private keys, signing certificates, tokens, `.env` files, and credentials outside the project and package inputs.
 - Disable DevTools in production and avoid logging secrets or full sensitive payloads.
 - Review backend dependencies as privileged code.

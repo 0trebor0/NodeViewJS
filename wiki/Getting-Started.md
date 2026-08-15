@@ -8,6 +8,8 @@
 - macOS: Xcode command-line tools and a supported WKWebView system
 - Linux: GTK 3 and WebKitGTK 4.1 development/runtime packages
 
+On Windows, `setup.bat` in the repository root installs any missing prerequisite through `winget` and then runs `npm install`. Use `setup.bat /check` to report what is missing without changing anything. Open a new terminal after anything is installed so `PATH` updates are visible.
+
 ## Create an application
 
 ```powershell

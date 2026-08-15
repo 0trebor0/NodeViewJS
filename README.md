@@ -1541,7 +1541,15 @@ npm run test:trusted-document
 npm run test:webview-capabilities
 ```
 
-Live integration tests open native WebView windows briefly. `npm run test:installer` performs a per-user package, install, launch, replacement, rollback, and uninstall smoke test on Windows.
+On Windows, `npm run test:full` runs the default suite plus every native and WebView integration in one pass:
+
+```powershell
+npm run test:full
+```
+
+Live integration tests open native WebView windows briefly, so run them from an interactive desktop session. `npm run test:installer` performs a per-user package, install, launch, replacement, rollback, and uninstall smoke test on Windows.
+
+Continuous integration runs `npm test`, the security gate, and the lifecycle test. It does not run the live WebView suites: a hosted runner can create a WebView2 controller but cannot complete browser navigation, so those remain a local gate. See `wiki/Testing.md`.
 
 ### Help test macOS and Linux
 

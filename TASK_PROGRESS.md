@@ -109,6 +109,17 @@ None.
   window, `app.emit()` skips closed windows and still reaches open ones
   (asserted with delivery counters), and repeated `close()` stays harmless.
 
+## Documentation audit
+
+Each feature shipped in this session was checked against every documentation
+file. Seventeen gaps were found and closed: network access was missing from
+`SECURITY.md`, `docs/index.html`, `wiki/Backend-API.md`, and
+`wiki/Security-Model.md`; `isClosed` and the closed-window emit rule were
+missing from `wiki/Backend-API.md`, `wiki/Windows-and-Multiple-Windows.md`,
+and `wiki/Frontend-Bridge.md`; `setup.bat` was missing from `docs/index.html`,
+`wiki/Getting-Started.md`, and `CONTRIBUTING.md`; and `test:full` was missing
+from `README.md`. A re-run of the audit reports zero gaps.
+
 ## Not verified
 
 - `setup.bat` detection was confirmed against a machine where every

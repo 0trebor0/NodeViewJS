@@ -349,6 +349,15 @@ npm install
 npm run dev
 npm run package</code></pre><span class="lang">powershell</span></div>
 
+    <div class="note">
+      <strong>Missing prerequisites on Windows?</strong>
+      <p>Clone the repository and run <code>.\setup.bat</code>. It installs anything missing through
+      <code>winget</code> — Node.js 20+, Python 3, the Visual Studio 2022 C++ workload, and the WebView2
+      Runtime — then runs <code>npm install</code>. <code>.\setup.bat /check</code> reports what is
+      missing without changing anything, and <code>/deps</code> skips the project install. Open a new
+      terminal afterwards so <code>PATH</code> updates are visible.</p>
+    </div>
+
     <p><code>nodeviewjs create</code> scaffolds:</p>
     <div class="codewrap"><pre><code>MyApp/
   package.json
@@ -989,6 +998,7 @@ app.command("readConfig", { permission: "fs:read", scope: "config" }, async () =
         <tr><td><code>shell:open</code></td><td>Opening external URLs or existing local paths.</td></tr>
         <tr><td><code>notification:show</code></td><td>Displaying notifications.</td></tr>
         <tr><td><code>window:control</code></td><td>Window drag, minimize, maximize, close, context menus.</td></tr>
+        <tr><td><code>net:fetch</code></td><td>Outbound HTTP requests, restricted to <code>allowedOrigins</code>.</td></tr>
       </tbody>
     </table>
     </div>
@@ -1090,6 +1100,75 @@ app.command("showExport", { permission: "shell:open" }, ({ file }) =&gt; {
     <code>shell.openPath(path)</code> resolves the path and rejects it unless the file or directory
     already exists. Both return <code>true</code> once Windows accepts the launch request and throw a
     descriptive error otherwise. NodeViewJS provides no arbitrary command or shell-execution method.</p>
+
+    <h3 id="network">Network</h3>
+    <p>The WebView cannot reach the network — remote fetches, images, scripts, and frame content are
+    blocked. To call an HTTP API, grant <code>net:fetch</code>, list the origins the app may reach, and
+    perform the request in a command.</p>
+
+    <div class="codewrap"><pre><code>const app = new App({
+  entry: "index.html",
+  permissions: ["net:fetch"],
+  allowedOrigins: ["https://api.example.com"]
+});
+
+app.command("api:get", { permission: "net:fetch" }, async ({ path }) =&gt; {
+  if (typeof path !== "string" || !path.startsWith("/")) {
+    throw new TypeError("path must start with /.");
+  }
+  const response = await app.fetch({
+    url: `https://api.example.com${path}`,
+    headers: { accept: "application/json" }
+  });
+  if (!response.ok) throw new Error(`API returned ${response.status}`);
+  return JSON.parse(response.body);
+});</code></pre><span class="lang">javascript</span></div>
+
+    <div class="codewrap"><pre><code>const data = await NodeViewJS.invoke("api:get", { path: "/v1/items" });</code></pre><span class="lang">javascript</span></div>
+
+    <p><code>app.fetch()</code> binds the app's allowlist, so a command cannot widen it. It returns
+    <code>{ url, status, ok, headers, body }</code> with <code>body</code> as text. Options are
+    <code>url</code>, <code>method</code>, <code>headers</code>, <code>body</code>,
+    <code>timeoutMs</code>, and <code>maxResponseBytes</code>.</p>
+
+    <p><code>allowedOrigins</code> takes origins only — no path, query, or fragment. Both
+    <code>http</code> and <code>https</code> are accepted, including private and internal addresses such
+    as <code>http://localhost:3000</code> or <code>http://192.168.1.50:8080</code>, because listing an
+    origin is the deliberate act that grants it. Other schemes are rejected, at most 32 entries are
+    allowed, and an app with no <code>allowedOrigins</code> cannot make requests at all.</p>
+
+    <h4>What is validated before the request leaves the process</h4>
+    <div class="tablewrap">
+    <table>
+      <thead><tr><th>Control</th><th>Behavior</th></tr></thead>
+      <tbody>
+        <tr><td>Origin</td><td>Must match <code>allowedOrigins</code> exactly.</td></tr>
+        <tr><td>Redirects</td><td>Resolved manually, re-checked against the allowlist on every hop, capped at 3.</td></tr>
+        <tr><td>Method</td><td><code>GET</code>, <code>HEAD</code>, <code>POST</code>, <code>PUT</code>, <code>PATCH</code>, <code>DELETE</code> only.</td></tr>
+        <tr><td>URL</td><td>2048 characters maximum, no embedded credentials.</td></tr>
+        <tr><td>Headers</td><td><code>Host</code>, <code>Cookie</code>, <code>Content-Length</code>, and other transport headers cannot be set. Names and values are pattern-checked and length-bounded, so a value cannot inject a second header.</td></tr>
+        <tr><td>Request body</td><td>Strings only, 1 MiB maximum.</td></tr>
+        <tr><td>Response</td><td>8 MiB ceiling counted from bytes actually received, not a declared <code>content-length</code>. 30-second default timeout.</td></tr>
+        <tr><td>Response headers</td><td><code>set-cookie</code> is stripped.</td></tr>
+      </tbody>
+    </table>
+    </div>
+
+    <p>Because <code>net:fetch</code> is an ordinary permission, scopes such as
+    <code>net:fetch:reports</code>, the <code>net:*</code> group, and per-window narrowing all work
+    unchanged.</p>
+
+    <div class="warn">
+      <strong>Two limits worth knowing</strong>
+      <p>When a command builds a request entirely from its own constants, the global
+      <code>fetch()</code> is equivalent and simpler — <code>app.fetch()</code> earns its place when
+      part of the request comes from the frontend. And <code>allowedOrigins</code> constrains code that
+      goes through the helper; it is <em>not</em> a network sandbox, because backend code and plugins
+      are trusted and can reach any host directly. The enforced boundary is <code>net:fetch</code>,
+      which decides whether the WebView can cause a request at all. Allowlisting also matches the
+      configured origin rather than the address it resolves to, so it does not defend against DNS
+      rebinding.</p>
+    </div>
 
     <h3 id="clipboard">Clipboard</h3>
     <div class="codewrap"><pre><code>const { App, clipboard } = require("nodeviewjs");

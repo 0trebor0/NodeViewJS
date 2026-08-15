@@ -20,6 +20,16 @@ app.emit("theme:changed", theme);             // all open windows
 settingsWindow.emit("settings:changed", data); // one window
 ```
 
+A closed window can never flush its readiness queue, so the two paths treat it differently. `app.emit()` addresses whichever windows are live and skips closed ones silently. `AppWindow.emit()` names one specific window, so emitting at a closed one throws `Window has been closed.` immediately rather than queueing events that will never arrive.
+
+Check `window.isClosed` when a window may already be gone. It is distinct from `!isOpen`: a window that has not been opened yet is not closed, so it still buffers events emitted before `app.run()`.
+
+```js
+if (!settingsWindow.isClosed) {
+  settingsWindow.emit("settings:changed", data);
+}
+```
+
 ## Window controls
 
 ```js

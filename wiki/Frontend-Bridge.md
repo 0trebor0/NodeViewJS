@@ -69,6 +69,8 @@ app.emit("status:changed", { status: "ready" });
 
 `emit()` does not acknowledge handler completion. Use `invoke()` for request/response dependencies, or emit a separate acknowledgement event.
 
+On the backend, `app.emit()` reaches whichever windows are live and skips closed ones. `AppWindow.emit()` targets one window and throws `Window has been closed.` if that window is gone, rather than queueing events it can never deliver.
+
 ## Readiness and buffering
 
 Events in both directions are buffered until the frontend is ready. This makes the following safe:

@@ -11,6 +11,7 @@ NodeViewJS separates an untrusted WebView frontend from a trusted Node.js backen
 - Detached and revalidated JSON transport snapshots
 - Windows top-frame and canonical trusted-document checks
 - Windows app-root resource policy and blocked remote capabilities
+- Outbound HTTP only through `net:fetch` commands, bound to an origin allowlist
 - Isolated WebView profiles by stable application identity
 - Package input containment and deterministic resource integrity
 - Signed update metadata with identity, version, hash, size, and HTTPS binding
@@ -32,6 +33,14 @@ app.command("records:read", async (payload) => {
   return readAuthorizedRecord(id);
 });
 ```
+
+## Outbound network access
+
+The WebView cannot reach the network. A backend command holding `net:fetch` can, and `app.fetch()` restricts it to the origins listed in `allowedOrigins`. Redirects are re-checked against that allowlist on every hop, so an allowed origin cannot hand the request to another host.
+
+Two limits are deliberate. `allowedOrigins` constrains code that goes through the helper; it is not a network sandbox, because backend code and plugins are trusted and can reach any host directly. And the allowlist matches the configured origin rather than the address it resolves to, so it does not defend against DNS rebinding.
+
+Never concatenate frontend input into the host portion of a URL. Pass the frontend only the parts it needs to influence and validate them in the handler.
 
 ## Reporting vulnerabilities
 

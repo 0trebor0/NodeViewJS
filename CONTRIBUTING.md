@@ -22,7 +22,9 @@ version, and whether the test ran in a graphical desktop session.
 ## Code changes
 
 1. Create a focused branch from `main`.
-2. Install dependencies with `npm ci`.
+2. Install dependencies with `npm ci`. On Windows, `setup.bat` installs any
+   missing prerequisite through `winget` first, and `setup.bat /check` reports
+   what is missing without changing anything.
 3. Make the smallest change needed for the issue.
 4. Add or update focused tests when behavior changes.
 5. Run `npm test` and the relevant native integration tests. On Windows,
