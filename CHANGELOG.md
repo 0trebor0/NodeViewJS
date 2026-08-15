@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+### Added
+
+- `AppWindow.isClosed` reports whether a window has been closed. It is distinct from `!isOpen`: a window that has not been opened yet is not closed, so it still buffers events emitted before `app.run()`.
+- `npm run test:native`, `npm run test:native-ui`, and `npm run test:full` group the native and WebView suites that previously had no aggregate runner.
+- `docs/index.html` is a complete single-page project guide covering setup, CLI, the frontend bridge, the backend API, packaging, updates, security, and troubleshooting.
+
+### Fixed
+
+- `app.emit()` no longer queues broadcasts into closed windows. A closed window can never flush its readiness buffer, so events accumulated there until the buffer limit threw out of `app.emit()` and broke app-wide events for the remaining open windows.
+- `AppWindow.emit()` on a closed window now throws `Window has been closed.` immediately instead of queueing events that can never be delivered. `app.emit()` continues to broadcast to the open windows and skips closed ones.
+- `notification.show()` validates its options before loading the native addon. Invalid arguments previously surfaced as a native addon load failure on machines where the addon had not been built.
+- `config.resolveConfigPath()` rejects file names longer than 255 characters. An over-long name previously reached the filesystem and failed as `ENOENT`, which reads as a missing directory rather than an over-long file name.
+
+### Security
+
+- `undici` is pinned to 6.28.0 through a dependency override. The version `node-gyp` resolved carried advisories for response desynchronization, CRLF injection, and cookie attribute injection.
+
 ### Changed
 
 - Windows native build and packaging now fail early with a clear Python 3 prerequisite message before `node-gyp` runs.
