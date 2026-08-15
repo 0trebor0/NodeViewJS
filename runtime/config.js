@@ -4,6 +4,8 @@ const fs = require("node:fs/promises");
 const os = require("node:os");
 const path = require("node:path");
 
+const MAX_FILE_NAME_LENGTH = 255;
+
 const CONTROL_CHARACTER_PATTERN = /[\u0000-\u001F\u007F]/;
 
 function resolveConfigDirectory(options = {}) {
@@ -40,6 +42,13 @@ function resolveConfigPath(options = {}) {
   }
   if (CONTROL_CHARACTER_PATTERN.test(fileName)) {
     throw new TypeError("Config fileName must not contain control characters.");
+  }
+  // Without this the name reaches the filesystem and fails as ENOENT, which
+  // reads as a missing directory rather than an over-long file name.
+  if (fileName.length > MAX_FILE_NAME_LENGTH) {
+    throw new TypeError(
+      `Config fileName must be at most ${MAX_FILE_NAME_LENGTH} characters.`
+    );
   }
   if (fileName !== path.basename(fileName)) {
     throw new TypeError("Config fileName must not include directories.");

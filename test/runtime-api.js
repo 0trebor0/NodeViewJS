@@ -720,6 +720,17 @@ async function testConfig() {
     /must end with .json/
   );
 
+  // An over-long name used to reach the filesystem and fail as ENOENT, which
+  // reads as a missing directory rather than an over-long file name.
+  assert.throws(
+    () => config.resolveConfigPath({ directory, fileName: `${"a".repeat(300)}.json` }),
+    /at most 255 characters/
+  );
+  assert.equal(
+    typeof config.resolveConfigPath({ directory, fileName: `${"a".repeat(250)}.json` }),
+    "string"
+  );
+
   assert.throws(
     () => config.resolveConfigPath({ directory: `${directory}\0hidden`, fileName: "settings.json" }),
     /directory must not contain control characters/
