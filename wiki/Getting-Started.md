@@ -4,11 +4,49 @@
 
 - Node.js 20 or newer
 - npm
-- Windows: Visual Studio 2022 Build Tools with Desktop development with C++, Python 3, and Microsoft Edge WebView2 Runtime
-- macOS: Xcode command-line tools and a supported WKWebView system
-- Linux: GTK 3 and WebKitGTK 4.1 development/runtime packages
+- Python 3, discoverable by `node-gyp`
+- Windows 10 or newer: Visual Studio 2022 Build Tools with Desktop development with C++, and the Microsoft Edge WebView2 Runtime
+- macOS 12 or newer: Xcode command-line tools with the macOS SDK
+- Linux: GTK 3 and WebKitGTK 4.1 development/runtime packages, and `pkg-config`
 
-On Windows, `setup.bat` in the repository root installs any missing prerequisite through `winget` and then runs `npm install`. Use `setup.bat /check` to report what is missing without changing anything. Open a new terminal after anything is installed so `PATH` updates are visible.
+NodeViewJS builds its native host during installation, so a compiler toolchain
+is required today. Prebuilt binaries are planned; see `PLAN.md`.
+
+On Ubuntu 24.04:
+
+```bash
+sudo apt-get install libgtk-3-dev libwebkit2gtk-4.1-dev pkg-config
+```
+
+The build script downloads and stages the WebView2 SDK into `vendor/` when
+needed.
+
+On Windows, `setup.bat` in the repository root installs any missing prerequisite through `winget` and then runs `npm install`. Use `setup.bat /check` to report what is missing without changing anything, or `setup.bat /deps` to install prerequisites without running `npm install`. Open a new terminal after anything is installed so `PATH` updates are visible.
+
+To install manually, or on macOS and Linux:
+
+```powershell
+npm install
+npm run setup
+```
+
+To check a machine before or after installing, run:
+
+```powershell
+npx nodeviewjs doctor
+```
+
+It reports the Node.js version, native addon state, Python 3, C++ toolchain,
+system WebView runtime, and packaging prerequisites, and prints the install
+command for anything missing.
+
+If `node-gyp` cannot find Python, install it or set `PYTHON` before building:
+
+```powershell
+winget install Python.Python.3.12
+$env:PYTHON = "C:\Path\To\Python\python.exe"
+npm run build
+```
 
 ## Create an application
 
@@ -73,19 +111,121 @@ app.run();
 </html>
 ```
 
+## Configure the app package
+
+Packaging and launch registration read a `nodeviewjs` block from your project's
+`package.json`:
+
+```json
+{
+  "name": "my-app",
+  "version": "0.1.0",
+  "main": "app.js",
+  "nodeviewjs": {
+    "name": "MyApp",
+    "appId": "com.example.my-app",
+    "entry": "app.js",
+    "icon": "assets/app.ico",
+    "macIcon": "assets/app.icns",
+    "protocols": [{ "scheme": "my-app", "name": "My App URL" }],
+    "fileAssociations": [{ "extension": ".myapp", "name": "My App document" }],
+    "include": ["assets"],
+    "exclude": ["assets/private", "assets/private/*"],
+    "secretWarnings": true,
+    "metadata": {
+      "companyName": "My Company",
+      "fileDescription": "My App",
+      "productName": "My App",
+      "copyright": "Copyright (C) 2026 My Company"
+    }
+  },
+  "scripts": {
+    "dev": "nodeviewjs dev app.js",
+    "package": "nodeviewjs package",
+    "installer": "nodeviewjs installer",
+    "update:manifest": "nodeviewjs update-manifest"
+  }
+}
+```
+
+- `name` becomes the portable folder name and exe name.
+- `appId` is the stable identity used for app data, notifications, and signed updates.
+- `entry` is your backend app entry file.
+- `icon` is an optional Windows `.ico` used as the window/taskbar and exe icon.
+- `macIcon` is an optional macOS `.icns` bundle icon.
+- `protocols` registers custom URL schemes in the per-user Windows installer.
+- `fileAssociations` registers extensions with Windows Open With and Default Apps.
+- `include` copies extra files or folders into `resources/app`.
+- `exclude` removes files or folders from the bundle.
+- `secretWarnings` defaults to `true` on Windows; set `false` to disable redacted credential-pattern warnings.
+- `metadata` sets Windows version metadata when the launcher is built.
+
+On Windows, `entry`, `icon`, `include`, and `exclude` values must be relative and
+traversal-free. Packaging rejects inputs or destinations containing symbolic
+links, junctions, or other reparse-point escapes.
+
 ## Development
 
 ```powershell
 npm run dev
 ```
 
-Development mode enables frontend live reload, startup timing, backend error reporting, and DevTools. Packaged Windows applications intentionally disable DevTools.
+Development mode enables DevTools, startup timing, and backend error reporting,
+and watches the entry file's directory so the WebView reloads when frontend
+`.html`, `.css`, or `.js` files change. Generated folders such as `node_modules`,
+`build`, and `.nodeview-webview` are ignored. Frontend reloads keep the Node.js
+backend running — restart dev mode after changing backend code.
 
-## Build and package
+`nodeviewjs dev` manages `NODEVIEW_DEVTOOLS`, `NODEVIEW_DEV_WATCH`, and
+`NODEVIEW_STARTUP_TIMING` internally. Packaged apps ignore inherited values for
+those, and packaged Windows apps disable DevTools even when `devtools: true` is
+set.
+
+## CLI commands
+
+```powershell
+nodeviewjs create MyApp
+nodeviewjs doctor
+nodeviewjs setup
+nodeviewjs build
+nodeviewjs start app.js
+nodeviewjs dev app.js
+nodeviewjs package
+nodeviewjs installer
+nodeviewjs update-manifest https://updates.example.com/MyApp-1.2.0-setup.exe
+nodeviewjs --help
+```
+
+The CLI does not need to be installed globally: npm finds `nodeviewjs` in
+`node_modules/.bin` when it is run from an npm script.
+
+## Build
 
 ```powershell
 npm run build
+```
+
+The platform-aware `scripts/build.js` entry point prepares the WebView2 SDK on
+Windows, generates the native bridge header from `runtime/bridge.js`, builds the
+native addon and launcher for the host platform, and stages the outputs into
+`build/nodeview/`. Build outputs are ignored by Git.
+
+## Package
+
+```powershell
 npx nodeviewjs package
 ```
 
 See [[Packaging and Distribution]] for installers, signing, and updates.
+
+## TypeScript
+
+Type declarations ship with the package, so `import { App } from "nodeviewjs"`
+is typed without installing anything else. For frontend files, reference the
+bridge declarations:
+
+```ts
+/// <reference path="./node_modules/nodeviewjs/types/bridge.d.ts" />
+
+const answer = await NodeViewJS.invoke<string>("greet", "World");
+```

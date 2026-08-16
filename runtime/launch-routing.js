@@ -2,18 +2,12 @@
 
 const path = require("node:path");
 
+const { assertDenseArray, safeDiagnosticString } = require("./validation");
+
 const PROTOCOL_PATTERN = /^[a-z][a-z0-9+.-]{1,31}$/;
 const EXTENSION_PATTERN = /^\.[a-z0-9][a-z0-9-]{0,15}$/;
 const RESERVED_PROTOCOLS = new Set(["file", "http", "https", "mailto"]);
 const CONTROL_CHARACTER_PATTERN = /[\u0000-\u001F\u007F]/;
-
-function safeDiagnosticString(value) {
-  try {
-    return String(value);
-  } catch {
-    return "<unprintable>";
-  }
-}
 
 function safeObjectKeys(value) {
   try {
@@ -36,7 +30,7 @@ function parseArrayEnvironment(name, environment) {
 }
 
 function normalizeProtocols(value = []) {
-  if (!Array.isArray(value)) throw new TypeError("App protocols must be an array.");
+  assertDenseArray(value, "App protocols");
   const seen = new Set();
   return value.map((item) => {
     const options = typeof item === "string" ? { scheme: item } : item;
@@ -46,7 +40,9 @@ function normalizeProtocols(value = []) {
     const keys = safeObjectKeys(options);
     if (!keys) throw new TypeError("App protocol options object could not be inspected.");
     const unknownKey = keys.find((key) => !["scheme", "name"].includes(key));
-    if (unknownKey) throw new TypeError(`Unsupported protocol option: ${unknownKey}`);
+    if (unknownKey) {
+      throw new TypeError(`Unsupported protocol option: ${safeDiagnosticString(unknownKey)}`);
+    }
     const scheme = typeof options.scheme === "string" ? options.scheme.toLowerCase() : "";
     if (!PROTOCOL_PATTERN.test(scheme) || RESERVED_PROTOCOLS.has(scheme)) {
       throw new TypeError(`Unsupported custom protocol scheme: ${safeDiagnosticString(options.scheme)}`);
@@ -63,7 +59,7 @@ function normalizeProtocols(value = []) {
 }
 
 function normalizeFileAssociations(value = []) {
-  if (!Array.isArray(value)) throw new TypeError("App fileAssociations must be an array.");
+  assertDenseArray(value, "App fileAssociations");
   const seen = new Set();
   return value.map((item) => {
     const options = typeof item === "string" ? { extension: item } : item;
@@ -73,7 +69,9 @@ function normalizeFileAssociations(value = []) {
     const keys = safeObjectKeys(options);
     if (!keys) throw new TypeError("File association options object could not be inspected.");
     const unknownKey = keys.find((key) => !["extension", "name"].includes(key));
-    if (unknownKey) throw new TypeError(`Unsupported file association option: ${unknownKey}`);
+    if (unknownKey) {
+      throw new TypeError(`Unsupported file association option: ${safeDiagnosticString(unknownKey)}`);
+    }
     const extension = typeof options.extension === "string"
       ? options.extension.toLowerCase()
       : "";

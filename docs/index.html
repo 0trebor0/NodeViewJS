@@ -496,8 +496,8 @@ app.run();</code></pre><span class="lang">javascript</span></div>
     <div class="note">
       <strong>No bridge script tag</strong>
       <p>Do not add a bridge <code>&lt;script&gt;</code> to your source HTML. NodeViewJS provides
-      <code>window.NodeViewJS</code> automatically. <code>window.NodeView</code> is retained as a
-      compatibility alias; new apps should use <code>window.NodeViewJS</code>.</p>
+      <code>window.NodeViewJS</code> automatically. It is the only browser global; the former
+      <code>window.NodeView</code> alias was removed before the first public release.</p>
     </div>
 
     <h3 id="step-5-dev">5. Run during development</h3>

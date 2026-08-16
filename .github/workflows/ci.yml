@@ -19,16 +19,22 @@ env:
 
 jobs:
   windows:
-    name: Windows
+    # 20 is the minimum version package.json supports, so it is tested on every
+    # change rather than assumed to work.
+    name: Windows (Node ${{ matrix.node-version }})
     runs-on: windows-2022
     timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: ["20", "22"]
     steps:
       - name: Check out repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Set up Node.js
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
-          node-version: "22"
+          node-version: ${{ matrix.node-version }}
           package-manager-cache: false
       - name: Install dependencies
         run: npm ci --ignore-scripts
@@ -37,6 +43,7 @@ jobs:
       - name: Run unit and packaging tests
         run: npm test
       - name: Run release security gate
+        if: matrix.node-version == '22'
         run: npm run security:gate
       # The runner can create a WebView2 controller but cannot complete browser
       # navigation, so the suites that drive a live page (test:native) and the
@@ -46,6 +53,31 @@ jobs:
         run: npm run test:native-lifecycle
       - name: Preview npm package
         run: npm pack --dry-run
+
+  package:
+    # Proves the published artifact installs and resolves on the minimum
+    # supported Node version without a compiler toolchain.
+    name: Packed artifact (Node 20)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Set up Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: "20"
+          package-manager-cache: false
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+      - name: Preview npm package
+        run: npm pack --dry-run
+      - name: Check public exports
+        run: npm run test:exports
+      - name: Check type declarations
+        run: npm run test:types
+      - name: Install from the packed tarball
+        run: npm run test:tarball
 
   macos:
     name: macOS

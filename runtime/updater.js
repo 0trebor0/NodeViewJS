@@ -8,6 +8,7 @@ const path = require("node:path");
 const { spawn } = require("node:child_process");
 
 const { resolveAppId, resolveUpdateDirectory } = require("./data-directory");
+const { safeDiagnosticString } = require("./validation");
 
 const MANIFEST_SCHEMA_VERSION = 1;
 const MANIFEST_MAX_BYTES = 64 * 1024;
@@ -31,11 +32,11 @@ function parseVersion(value) {
   }
   const match = VERSION_PATTERN.exec(value);
   if (!match) {
-    throw new TypeError(`Invalid update version: ${value}`);
+    throw new TypeError(`Invalid update version: ${safeDiagnosticString(value)}`);
   }
   const prerelease = match[4]?.split(".") ?? [];
   if (prerelease.some((part) => /^\d+$/.test(part) && part.length > 1 && part.startsWith("0"))) {
-    throw new TypeError(`Invalid update version: ${value}`);
+    throw new TypeError(`Invalid update version: ${safeDiagnosticString(value)}`);
   }
   return {
     value,
@@ -122,11 +123,11 @@ function validateManifest(manifest, options) {
   const missingKey = [...MANIFEST_KEYS].find((key) => !Object.hasOwn(manifest, key));
   if (unknownKey || missingKey) {
     throw new Error(unknownKey
-      ? `Unsupported update manifest field: ${unknownKey}`
+      ? `Unsupported update manifest field: ${safeDiagnosticString(unknownKey)}`
       : `Update manifest is missing field: ${missingKey}`);
   }
   if (manifest.schemaVersion !== MANIFEST_SCHEMA_VERSION) {
-    throw new Error(`Unsupported update manifest schema: ${String(manifest.schemaVersion)}`);
+    throw new Error(`Unsupported update manifest schema: ${safeDiagnosticString(manifest.schemaVersion)}`);
   }
   if (resolveAppId(manifest.appId) !== manifest.appId || manifest.appId !== options.appId) {
     throw new Error("Update manifest appId does not match this application.");

@@ -12,6 +12,7 @@ function printHelp() {
 
 Usage:
   nodeviewjs create <app-name>
+  nodeviewjs doctor [--signing] [--json]
   nodeviewjs setup
   nodeviewjs build
   nodeviewjs start [entry]
@@ -22,6 +23,7 @@ Usage:
 
 Commands:
   create       Create a starter NodeViewJS app
+  doctor       Check this machine for build, run, and packaging prerequisites
   setup        Prepare generated/runtime build files
   build        Build the native addon and launcher
   start        Run an app entry file with Node.js
@@ -286,6 +288,9 @@ switch (command) {
     break;
   case "create":
     createApp(args);
+    break;
+  case "doctor":
+    process.exitCode = require(path.join(packageRoot, "scripts", "doctor.js")).runDoctor(args);
     break;
   case "setup":
     npmRun("setup");

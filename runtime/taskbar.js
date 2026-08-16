@@ -3,6 +3,8 @@
 const fs = require("node:fs");
 const path = require("node:path");
 
+const { safeDiagnosticString } = require("./validation");
+
 const PROGRESS_STATES = new Set(["normal", "paused", "error", "indeterminate"]);
 const ATTENTION_TYPES = new Set(["informational", "critical", "stop"]);
 const CONTROL_CHARACTER_PATTERN = /[\u0000-\u001F\u007F]/;
@@ -10,7 +12,7 @@ const CONTROL_CHARACTER_PATTERN = /[\u0000-\u001F\u007F]/;
 function normalizeProgress(value, state = "normal") {
   if (value === null) return Object.freeze({ value: 0, state: "none" });
   if (typeof state !== "string" || !PROGRESS_STATES.has(state)) {
-    throw new TypeError(`Unsupported taskbar progress state: ${String(state)}`);
+    throw new TypeError(`Unsupported taskbar progress state: ${safeDiagnosticString(state)}`);
   }
   if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > 1) {
     throw new RangeError("Taskbar progress value must be a number between 0 and 1, or null.");
@@ -39,7 +41,7 @@ function normalizeOverlay(icon, description = "") {
 
 function normalizeAttentionType(value = "informational") {
   if (typeof value !== "string" || !ATTENTION_TYPES.has(value)) {
-    throw new TypeError(`Unsupported window attention type: ${String(value)}`);
+    throw new TypeError(`Unsupported window attention type: ${safeDiagnosticString(value)}`);
   }
   return value;
 }

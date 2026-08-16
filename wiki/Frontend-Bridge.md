@@ -2,6 +2,37 @@
 
 NodeViewJS provides `window.NodeViewJS` automatically. Do not add a bridge `<script>` tag to application source files.
 
+`window.NodeViewJS` is the only browser global. The former `window.NodeView`
+alias was removed before the first public release; update any page that used it.
+
+## How the bridge is loaded
+
+During portable packaging, NodeViewJS writes the bridge to
+`resources/app/__nodeview/bridge.js` and adds a relative external script
+reference to every copied `.html` file. Your source HTML is never modified. This
+avoids requiring `unsafe-inline`, so Windows pages can use a policy such as
+`script-src 'self'` while the native host limits resources to the app root.
+Packaged apps set an internal marker so the native host skips document-start
+injection and navigates directly to the prepared HTML.
+
+The bridge source is ordinary editable JavaScript in `runtime/bridge.js`, and the
+same script stays embedded in the native addon as a development fallback.
+Development mode keeps native document-start injection so live reload works
+without generating files beside your source.
+
+```text
+Node app starts
+  -> native window opens
+  -> the system WebView is created
+  -> the packaged HTML file is loaded directly
+  -> its NodeViewJS bridge starts during parsing
+```
+
+There is no local HTTP server: the HTML rewrite happens once at packaging time,
+and app pages load from local files through a private per-WebView mapping. Only
+files copied into the package are prepared — HTML generated after packaging must
+provide its own bridge if it is used as a top-level app page.
+
 ## Commands
 
 Use `invoke()` when the frontend needs a result or acknowledgement.

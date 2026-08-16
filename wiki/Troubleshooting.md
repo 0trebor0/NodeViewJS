@@ -1,5 +1,25 @@
 # Troubleshooting
 
+## Start here
+
+```powershell
+npx nodeviewjs doctor
+```
+
+The doctor checks the Node.js version, whether the native addon is built and
+loadable, Python 3 for `node-gyp`, the platform C++ toolchain, the system
+WebView runtime, and the packaging prerequisites. Each failure names the exact
+install command to run. It exits non-zero when a required check fails, so it can
+gate a script.
+
+```powershell
+npx nodeviewjs doctor --signing   # also check release signing prerequisites
+npx nodeviewjs doctor --json      # machine-readable output
+```
+
+Signing checks are opt-in because they are release prerequisites, not
+development ones.
+
 ## `node-gyp` cannot find Python
 
 Native builds and Windows packaging require Python 3 for `node-gyp`. Install Python 3 and point npm

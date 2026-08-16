@@ -10,6 +10,7 @@ const {
   resolveWebViewDataDirectory
 } = require("./data-directory");
 const { startDevWatcher } = require("./dev-watcher");
+const { assertDenseArray, safeDiagnosticString } = require("./validation");
 const { createErrorLogger } = require("./error-logger");
 const ipc = require("./ipc");
 const { findLaunchTargets, resolveLaunchConfiguration } = require("./launch-routing");
@@ -51,14 +52,6 @@ function native() {
   return nativeAddon;
 }
 
-function safeDiagnosticString(value) {
-  try {
-    return String(value);
-  } catch {
-    return "<unprintable>";
-  }
-}
-
 function safeObjectKeys(value) {
   try {
     return Object.keys(value);
@@ -83,7 +76,7 @@ function parsePermission(value, { allowGroups, allowScopeWildcard, label }) {
     }
   }
 
-  throw new TypeError(`Unsupported ${label} permission: ${value}`);
+  throw new TypeError(`Unsupported ${label} permission: ${safeDiagnosticString(value)}`);
 }
 
 function parseCommandPermission(value) {
@@ -186,7 +179,7 @@ function resolveCommandRegistration(optionsOrHandler, maybeHandler) {
       requirements = [parsed];
     }
   } else if (permissions !== undefined) {
-    requirements = permissions.map(parseCommandPermission);
+    requirements = assertDenseArray(permissions, "Command permissions").map(parseCommandPermission);
   }
 
   return { handler: maybeHandler, permissions: requirements };
@@ -198,7 +191,7 @@ function resolvePermissions(options) {
   let deny;
 
   if (Array.isArray(permissions)) {
-    allow = permissions;
+    allow = assertDenseArray(permissions, "App permissions");
     deny = [];
   } else if (permissions && typeof permissions === "object") {
     const keys = safeObjectKeys(permissions);
@@ -209,13 +202,17 @@ function resolvePermissions(options) {
       (key) => key !== "allow" && key !== "deny"
     );
     if (unknownKeys.length > 0) {
-      throw new TypeError(`Unsupported app permission policy option: ${unknownKeys[0]}`);
+      throw new TypeError(
+        `Unsupported app permission policy option: ${safeDiagnosticString(unknownKeys[0])}`
+      );
     }
     allow = permissions.allow ?? [];
     deny = permissions.deny ?? [];
     if (!Array.isArray(allow) || !Array.isArray(deny)) {
       throw new TypeError("App permission policy allow and deny values must be arrays.");
     }
+    assertDenseArray(allow, "App permission policy allow");
+    assertDenseArray(deny, "App permission policy deny");
   } else {
     throw new TypeError("App permissions must be an array or policy object.");
   }
@@ -334,6 +331,7 @@ class AppWindow {
   #bridgeReady = false;
   #closed = false;
   #devWatcher;
+  #disposed = false;
   #eventHandlers = new Map();
   #id;
   #pendingMessages = [];
@@ -358,6 +356,16 @@ class AppWindow {
     return this.#closed;
   }
 
+  // "configured" before the first open, "open" while a native window exists,
+  // "closed" once closed but still reopenable by a startup retry, and
+  // "disposed" once the app has released it. Opening and closing are
+  // synchronous, so no caller can observe an intermediate state.
+  get lifecycleState() {
+    if (this.#disposed) return "disposed";
+    if (this.#id !== undefined) return "open";
+    return this.#closed ? "closed" : "configured";
+  }
+
   on(eventName, handler) {
     if (typeof eventName !== "string" || eventName.length === 0) {
       throw new TypeError("Event name must be a non-empty string.");
@@ -369,7 +377,11 @@ class AppWindow {
     const handlers = this.#eventHandlers.get(eventName) ?? new Set();
     handlers.add(handler);
     this.#eventHandlers.set(eventName, handlers);
-    return () => handlers.delete(handler);
+    // Delegating to off() keeps the empty-set cleanup in one place and makes a
+    // repeated call harmless.
+    return () => {
+      this.off(eventName, handler);
+    };
   }
 
   once(eventName, handler) {
@@ -402,6 +414,9 @@ class AppWindow {
     }
     // A closed window can never flush its readiness buffer, so queueing here
     // would grow memory and only surface as a buffer-limit error much later.
+    if (this.#disposed) {
+      throw new Error("Window has been disposed.");
+    }
     if (this.#closed) {
       throw new Error("Window has been closed.");
     }
@@ -440,6 +455,7 @@ class AppWindow {
     this.#pendingMessages = [];
     this.#pendingMessageBytes = 0;
     this.#closed = true;
+    this.#app._retireWindow(this);
     return this;
   }
 
@@ -602,6 +618,9 @@ class AppWindow {
 
   _open(showImmediately) {
     if (this.#id !== undefined) return this;
+    if (this.#disposed) {
+      throw new Error("Window has been disposed and cannot be reopened.");
+    }
     if (!fs.existsSync(this.options.entry)) {
       throw new Error(`Window entry file was not found: ${this.options.entry}`);
     }
@@ -636,14 +655,21 @@ class AppWindow {
 
     try {
       if (this.options.tray) native().setTray(id, this.options.tray);
-      native().setMessageHandler(id, (message) => this.#app._handleWindowMessage(this, message));
+      // Native callbacks have no caller to reject into, so every promise they
+      // start is consumed here rather than escaping as an unhandled rejection.
+      // The already-settled promise is returned so tests can await a dispatch;
+      // the native caller ignores it.
+      native().setMessageHandler(id, (message) => this.#app
+        ._handleWindowMessage(this, message)
+        .catch((error) => {
+          this.#app._reportHandlerFailure("Window message handling failed", error);
+        }));
       if (typeof native().setMenuHandler === "function") {
-        native().setMenuHandler(id, (event) => {
-          this.#app._handleMenuCommand(this, event).catch((error) => {
-            this.#app._reportError("Menu handler failed", error);
-            console.error(`[NodeViewJS menu] ${error.stack ?? error}`);
-          });
-        });
+        native().setMenuHandler(id, (event) => this.#app
+          ._handleMenuCommand(this, event)
+          .catch((error) => {
+            this.#app._reportHandlerFailure("Menu handler failed", error);
+          }));
         if (this.options.menu) native().setApplicationMenu(id, this.options.menu);
       }
       native().loadFile(id, this.options.entry);
@@ -660,14 +686,27 @@ class AppWindow {
   }
 
   async _dispatch(eventName, payload) {
-    for (const handler of [...this.#eventHandlers.get(eventName) ?? []]) {
-      try {
-        await handler(payload);
-      } catch (error) {
-        this.#app._reportError(`Window event '${eventName}' failed`, error);
-        throw error;
-      }
-    }
+    await this.#app._dispatchHandlers(
+      this.#eventHandlers.get(eventName),
+      payload,
+      `Window event '${eventName}' failed`
+    );
+  }
+
+  // Called by the app once a running application closes this window: the
+  // window is not reopenable afterwards, so its handlers and buffers must not
+  // outlive it.
+  _dispose() {
+    this.#disposed = true;
+    this.#eventHandlers.clear();
+    this.#pendingMessages = [];
+    this.#pendingMessageBytes = 0;
+  }
+
+  // Internal: lets the event-cleanup tests prove that unsubscribing removes the
+  // event name instead of leaving an empty handler set behind.
+  _eventNames() {
+    return [...this.#eventHandlers.keys()];
   }
 
   _post(serializedMessage) {
@@ -932,7 +971,11 @@ class App {
     const handlers = this.#eventHandlers.get(eventName) ?? new Set();
     handlers.add(handler);
     this.#eventHandlers.set(eventName, handlers);
-    return () => handlers.delete(handler);
+    // Delegating to off() keeps the empty-set cleanup in one place and makes a
+    // repeated call harmless.
+    return () => {
+      this.off(eventName, handler);
+    };
   }
 
   once(eventName, handler) {
@@ -1000,16 +1043,12 @@ class App {
       const request = this.#singleInstance.request(
         { args: process.argv.slice(2), cwd: process.cwd() },
         (payload) => this.#handleSecondInstance(payload),
-        (error) => {
-          this._reportError("Single-instance server failed", error);
-          console.error(`[NodeViewJS single instance] ${error.stack ?? error}`);
-        }
+        (error) => this._reportHandlerFailure("Single-instance server failed", error)
       );
       if (!request.primary) {
         this.#hasRun = true;
         request.forwarded.catch((error) => {
-          this._reportError("Single-instance forwarding failed", error);
-          console.error(`[NodeViewJS single instance] ${error.stack ?? error}`);
+          this._reportHandlerFailure("Single-instance forwarding failed", error);
           process.exitCode = 1;
         });
         return false;
@@ -1028,7 +1067,9 @@ class App {
       this.#singleInstance?.close();
       this.#singleInstance = undefined;
       try { this.#stopPlugins(); } catch {}
-      for (const window of this.#windows) {
+      // Startup has not completed, so close() keeps these windows listed and a
+      // retry can reopen them.
+      for (const window of [...this.#windows]) {
         try { window.close(); } catch {}
       }
       throw error;
@@ -1040,10 +1081,7 @@ class App {
     const initialCwd = process.cwd();
     queueMicrotask(() => {
       this.#routeLaunchArguments(initialArgs, initialCwd, true).catch(
-        (error) => {
-          this._reportError("Initial launch routing failed", error);
-          console.error(`[NodeViewJS launch routing] ${error.stack ?? error}`);
-        }
+        (error) => this._reportHandlerFailure("Initial launch routing failed", error)
       );
     });
     return true;
@@ -1053,7 +1091,7 @@ class App {
     let pluginError;
     try { this.#stopPlugins(); } catch (error) { pluginError = error; }
     try { this.#disposePlugins(); } catch (error) { pluginError ??= error; }
-    for (const window of this.#windows) window.close();
+    for (const window of [...this.#windows]) window.close();
     native().closeAllWindows();
     this.#singleInstance?.close();
     this.#singleInstance = undefined;
@@ -1134,14 +1172,11 @@ class App {
   }
 
   async #dispatchAppEvent(eventName, payload) {
-    for (const handler of [...this.#eventHandlers.get(eventName) ?? []]) {
-      try {
-        await handler(payload);
-      } catch (error) {
-        this._reportError(`App event '${eventName}' failed`, error);
-        throw error;
-      }
-    }
+    await this._dispatchHandlers(
+      this.#eventHandlers.get(eventName),
+      payload,
+      `App event '${eventName}' failed`
+    );
   }
 
   #startPlugins() {
@@ -1210,14 +1245,57 @@ class App {
         return;
       }
       await window._dispatch(message.event, message.payload);
-      for (const handler of [...this.#eventHandlers.get(message.event) ?? []]) {
-        await handler(message.payload);
-      }
+      await this._dispatchHandlers(
+        this.#eventHandlers.get(message.event),
+        message.payload,
+        `App event '${message.event}' failed`
+      );
     }
   }
 
   _reportError(context, error) {
     this.#errorLogger.report(context, error);
+  }
+
+  // Internal: lets the event-cleanup tests prove that unsubscribing removes the
+  // event name instead of leaving an empty handler set behind.
+  _eventNames() {
+    return [...this.#eventHandlers.keys()];
+  }
+
+  // The single dispatch path for application, window, and menu events. A
+  // failing handler is reported and isolated: it never terminates the process
+  // and never stops the remaining handlers, because the caller is usually a
+  // native callback with nowhere to propagate to.
+  async _dispatchHandlers(handlers, payload, context) {
+    for (const handler of [...handlers ?? []]) {
+      try {
+        await handler(payload);
+      } catch (error) {
+        this._reportHandlerFailure(context, error);
+      }
+    }
+  }
+
+  // Reporting runs on callback boundaries where a throw would become an
+  // unhandled rejection, so a failing logger or console must not escape.
+  _reportHandlerFailure(context, error) {
+    try {
+      this._reportError(context, error);
+    } catch {}
+    try {
+      console.error(`[NodeViewJS] ${context}: ${error?.stack ?? safeDiagnosticString(error)}`);
+    } catch {}
+  }
+
+  // Closing a window while the app is running disposes it: it is not
+  // reopenable, so keeping it in the active collection would retain every
+  // transient window for the life of the process. Before run() the window
+  // stays listed, because a failed startup is expected to retry it.
+  _retireWindow(window) {
+    if (!this.#hasRun) return;
+    window._dispose();
+    this.#windows.delete(window);
   }
 
   async _handleMenuCommand(window, event) {

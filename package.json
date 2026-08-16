@@ -19,6 +19,18 @@
   },
   "author": "0trebor0",
   "main": "runtime/index.js",
+  "types": "types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./types/index.d.ts",
+      "default": "./runtime/index.js"
+    },
+    "./ipc": {
+      "types": "./types/ipc.d.ts",
+      "default": "./runtime/ipc.js"
+    },
+    "./package.json": "./package.json"
+  },
   "bin": {
     "nodeviewjs": "bin/nodeviewjs.js"
   },
@@ -26,7 +38,8 @@
     "bin",
     "runtime",
     "scripts",
-    "src-nodeview"
+    "src-nodeview",
+    "types"
   ],
   "scripts": {
     "install": "npm run build",
@@ -34,6 +47,7 @@
     "build": "node scripts/build.js",
     "build:security-analysis": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build.ps1 -SecurityAnalysis",
     "clean": "node scripts/clean.js",
+    "doctor": "node scripts/doctor.js",
     "start": "node examples/basic/app.js",
     "dev": "node bin/nodeviewjs.js dev",
     "package:portable": "powershell -ExecutionPolicy Bypass -File scripts/package-portable.ps1",
@@ -43,6 +57,11 @@
     "package:linux": "node scripts/package-linux.js",
     "update:manifest": "node scripts/generate-update-manifest.js",
     "test:runtime": "node test/runtime-api.js",
+    "test:window-lifecycle": "node test/window-lifecycle.js",
+    "test:exports": "node test/package-exports.js",
+    "test:doctor": "node test/doctor.js",
+    "test:types": "tsc --noEmit -p types/tsconfig.json",
+    "test:tarball": "node test/package-tarball.js",
     "test:native-lifecycle": "node test/native-lifecycle.js",
     "test:bridge": "npm run test:native-lifecycle && node test/bridge-integration.js && node test/bridge-matrix-integration.js",
     "test:bridge-matrix": "node test/bridge-matrix-integration.js",
@@ -78,7 +97,7 @@
     "test:native": "npm run test:bridge && npm run test:raw-webmessage && npm run test:ipc-security-integration && npm run test:trusted-document && npm run test:webview-capabilities && npm run test:multi-window",
     "test:native-ui": "npm run test:menu-native && npm run test:tray-menu-native && npm run test:taskbar-native && npm run test:notification-native",
     "test:full": "npm test && npm run test:native && npm run test:native-ui",
-    "test": "npm run test:runtime && npm run test:error-logging && npm run test:ipc-security && npm run test:net && npm run test:updater && npm run test:plugins && npm run test:platform && npm run test:single-instance && npm run test:associations && npm run test:bundle && npm run test:menu && npm run test:taskbar && npm run test:window-colors && npm run test:notification && npm run test:bridge-embed && npm run test:package-inputs && npm run test:integrity && npm run test:cli",
+    "test": "npm run test:runtime && npm run test:window-lifecycle && npm run test:exports && npm run test:types && npm run test:doctor && npm run test:error-logging && npm run test:ipc-security && npm run test:net && npm run test:updater && npm run test:plugins && npm run test:platform && npm run test:single-instance && npm run test:associations && npm run test:bundle && npm run test:menu && npm run test:taskbar && npm run test:window-colors && npm run test:notification && npm run test:bridge-embed && npm run test:package-inputs && npm run test:integrity && npm run test:cli",
     "security:repo": "node scripts/security-scan.js",
     "security:audit": "npm audit --omit=dev --audit-level=high",
     "security:gate": "npm run security:repo && npm run security:audit && npm run build:security-analysis && npm run security:repo && npm run test:pe-hardening && npm run test:security-corpus && npm run test:runtime && npm run test:error-logging && npm run test:ipc-security && npm run test:updater && npm run test:package-inputs && npm run test:integrity && npm run test:installer",
@@ -109,5 +128,9 @@
       "copyright": "Copyright (C) 2026 NodeViewJS contributors"
     }
   },
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^22.20.1",
+    "typescript": "^5.9.3"
+  }
 }

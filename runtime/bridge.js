@@ -245,6 +245,16 @@
     for (const handler of [...listeners.get(eventName) || []]) handler(payload);
   }
 
+  // Shared by off() and the unsubscribe function on() returns, so a removed
+  // event name never leaves an empty set behind and a repeated call is
+  // harmless.
+  function removeListener(eventName, handler) {
+    const handlers = listeners.get(eventName);
+    if (!handlers) return;
+    handlers.delete(handler);
+    if (handlers.size === 0) listeners.delete(eventName);
+  }
+
   transport.listen(receive);
   transport.post({ version: IPC_VERSION, type: "event", event: BRIDGE_LOADING_EVENT });
 
@@ -305,7 +315,7 @@
       const handlers = listeners.get(eventName) || new Set();
       handlers.add(handler);
       listeners.set(eventName, handlers);
-      return () => handlers.delete(handler);
+      return () => removeListener(eventName, handler);
     },
     once(eventName, handler) {
       requireEventName(eventName, "once");
@@ -319,10 +329,7 @@
     off(eventName, handler) {
       requireEventName(eventName, "off");
       if (typeof handler !== "function") throw new TypeError("NodeViewJS.off requires a function.");
-      const handlers = listeners.get(eventName);
-      if (!handlers) return;
-      handlers.delete(handler);
-      if (handlers.size === 0) listeners.delete(eventName);
+      removeListener(eventName, handler);
     },
     emit(eventName, payload) {
       requireEventName(eventName, "emit");
@@ -345,12 +352,6 @@
   });
 
   Object.defineProperty(window, "NodeViewJS", {
-    value: api,
-    configurable: false,
-    writable: false
-  });
-
-  Object.defineProperty(window, "NodeView", {
     value: api,
     configurable: false,
     writable: false

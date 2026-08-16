@@ -1,5 +1,7 @@
 "use strict";
 
+const { safeDiagnosticString } = require("./validation");
+
 const COLOR_PATTERN = /^#[0-9a-fA-F]{6}$/;
 const COLOR_KEYS = ["titleBar", "titleText", "border"];
 
@@ -11,7 +13,7 @@ function normalizeWindowColors(value, fallback) {
     throw new TypeError("Window colors must be an object or null.");
   }
   const unknown = Object.keys(value).find((key) => !COLOR_KEYS.includes(key));
-  if (unknown) throw new TypeError(`Unsupported window color option: ${unknown}`);
+  if (unknown) throw new TypeError(`Unsupported window color option: ${safeDiagnosticString(unknown)}`);
 
   const result = {};
   for (const key of COLOR_KEYS) {

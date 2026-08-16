@@ -30,6 +30,25 @@ if (!settingsWindow.isClosed) {
 }
 ```
 
+## Transient windows
+
+Closing a window while the app is running disposes it: it leaves `app.windows`,
+its event handlers and buffered messages are released, and it cannot be
+reopened. An app that opens a window per document therefore does not accumulate
+them.
+
+```js
+const preview = app.createWindow({ title: "Preview", entry: "preview.html" });
+preview.close();
+
+preview.lifecycleState;        // "disposed"
+app.windows.includes(preview); // false
+```
+
+Before `app.run()`, a close is treated as startup recovery instead: the window
+stays listed as `closed` so a retried `run()` can reopen it. The full state table
+is in [[Lifecycle]].
+
 ## Window controls
 
 ```js

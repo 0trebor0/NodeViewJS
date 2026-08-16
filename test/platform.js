@@ -303,7 +303,9 @@ assert.equal(childWindow.NodeView, undefined);
 
 assert.equal(typeof window.NodeViewJS.invoke, "function");
 assert.equal(typeof window.NodeViewJS.ready, "function");
-assert.equal(window.NodeViewJS, window.NodeView);
+// window.NodeViewJS is the only browser global: the NodeView alias was removed
+// before the first public release.
+assert.equal(window.NodeView, undefined);
 const invocation = window.NodeViewJS.invoke("platform", { name: "webkit" });
 const invocationId = posted[0].id;
 assert.deepEqual(JSON.parse(JSON.stringify(posted[0])), {

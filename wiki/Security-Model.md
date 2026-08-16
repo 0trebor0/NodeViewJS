@@ -17,6 +17,38 @@ NodeViewJS separates an untrusted WebView frontend from a trusted Node.js backen
 - Signed update metadata with identity, version, hash, size, and HTTPS binding
 - Windows PE hardening and repeatable security gate
 
+## Boundaries in detail
+
+The frontend never receives `require()` or Node.js globals. Do not reintroduce
+them; expose registered commands instead. The frontend can call only what the
+backend registered.
+
+Top-level WebView navigation is restricted to local files inside the configured
+`entry` file's directory. Remote URLs and local files outside that directory are
+blocked and logged to stderr.
+
+On Windows the entry directory is mapped in memory to
+`https://app.nodeview.example/` inside that WebView instance. It registers no
+DNS, edits no hosts file, opens no port, contacts no server, and does not persist
+after the WebView closes; the mapping avoids Chromium's unique `file:` origin
+warnings while keeping canonical app-root checks and deny-CORS resource access.
+
+On Windows, `window.NodeViewJS` is created only in the top-level document, and
+native IPC verifies that each message came from the current canonical local
+document under the app root. Child frames, outside-root files, unexpected
+origins, and stale pages cannot invoke commands or emit events. Windows also
+permits WebView resources only from the local app root: remote fetches, images,
+scripts, and frame content receive blocked responses, and popups, downloads,
+permission prompts, external URI schemes, and packaged DevTools are denied.
+macOS and Linux parity for these boundaries is deferred — see
+[[Known Limitations]].
+
+IPC requires protocol version 1 and exact message schemas. Messages are limited
+to 256 KiB, 32 levels, 10,000 payload nodes, and 128-character command and event
+names; each window allows 64 active calls, applies a 30-second timeout, and
+rejects duplicate or recently replayed request IDs. Windows enforces the limit at
+the native forwarding boundary as well as in JavaScript.
+
 ## Backend responsibility
 
 Structural IPC validation does not replace semantic validation. A command that accepts a path, identifier, query, or permission-sensitive action must validate and authorize that value inside the handler.

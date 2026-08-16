@@ -1,5 +1,7 @@
 "use strict";
 
+const { assertDenseArray, safeDiagnosticString } = require("./validation");
+
 const MENU_ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/;
 const MAX_MENU_ITEMS = 256;
 const MAX_MENU_DEPTH = 8;
@@ -33,11 +35,11 @@ function normalizeAccelerator(value) {
     const token = part.toLowerCase();
     const modifier = token === "control" ? "ctrl" : token;
     if (["ctrl", "alt", "shift"].includes(modifier)) {
-      if (modifiers.has(modifier)) throw new TypeError(`Duplicate accelerator modifier: ${part}`);
+      if (modifiers.has(modifier)) throw new TypeError(`Duplicate accelerator modifier: ${safeDiagnosticString(part)}`);
       modifiers.add(modifier);
       continue;
     }
-    if (key) throw new TypeError(`Menu accelerator must contain one key: ${value}`);
+    if (key) throw new TypeError(`Menu accelerator must contain one key: ${safeDiagnosticString(value)}`);
     if (/^[a-z]$/i.test(part)) {
       key = { keyCode: part.toUpperCase().charCodeAt(0), display: part.toUpperCase() };
     } else if (/^[0-9]$/.test(part)) {
@@ -49,10 +51,10 @@ function normalizeAccelerator(value) {
       const [keyCode, display] = NAMED_KEYS.get(token);
       key = { keyCode, display };
     } else {
-      throw new TypeError(`Unsupported menu accelerator key: ${part}`);
+      throw new TypeError(`Unsupported menu accelerator key: ${safeDiagnosticString(part)}`);
     }
   }
-  if (!key) throw new TypeError(`Menu accelerator is missing a key: ${value}`);
+  if (!key) throw new TypeError(`Menu accelerator is missing a key: ${safeDiagnosticString(value)}`);
   if (modifiers.size === 0 && /^[A-Z0-9]$/.test(key.display)) {
     throw new TypeError("Letter and number accelerators require Ctrl, Alt, or Shift.");
   }
@@ -78,6 +80,7 @@ function normalizeMenuTemplate(value, { allowNull = false } = {}) {
 
   function visit(items, depth) {
     if (depth > MAX_MENU_DEPTH) throw new RangeError(`Menu nesting cannot exceed ${MAX_MENU_DEPTH} levels.`);
+    assertDenseArray(items, "Menu template");
     return items.map((item) => {
       state.count += 1;
       if (state.count > MAX_MENU_ITEMS) {
@@ -88,11 +91,11 @@ function normalizeMenuTemplate(value, { allowNull = false } = {}) {
       }
       const allowed = ["id", "label", "type", "enabled", "checked", "accelerator", "submenu"];
       const unknown = Object.keys(item).find((key) => !allowed.includes(key));
-      if (unknown) throw new TypeError(`Unsupported menu item option: ${unknown}`);
+      if (unknown) throw new TypeError(`Unsupported menu item option: ${safeDiagnosticString(unknown)}`);
 
       const type = item.type ?? (item.submenu === undefined ? "normal" : "submenu");
       if (!["normal", "checkbox", "separator", "submenu"].includes(type)) {
-        throw new TypeError(`Unsupported menu item type: ${String(type)}`);
+        throw new TypeError(`Unsupported menu item type: ${safeDiagnosticString(type)}`);
       }
       if (type === "separator") {
         if (Object.keys(item).some((key) => key !== "type")) {
@@ -165,7 +168,7 @@ function normalizeContextPosition(value = {}) {
     throw new TypeError("Context menu position must be an object.");
   }
   const unknown = Object.keys(value).find((key) => !["x", "y"].includes(key));
-  if (unknown) throw new TypeError(`Unsupported context menu position option: ${unknown}`);
+  if (unknown) throw new TypeError(`Unsupported context menu position option: ${safeDiagnosticString(unknown)}`);
   const hasX = value.x !== undefined;
   const hasY = value.y !== undefined;
   if (hasX !== hasY) throw new TypeError("Context menu position requires both x and y.");
