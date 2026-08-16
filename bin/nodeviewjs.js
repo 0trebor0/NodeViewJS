@@ -129,6 +129,30 @@ function writeFile(filePath, contents) {
   fs.writeFileSync(filePath, contents.trimStart().replace(/\n/g, "\r\n"));
 }
 
+// The generated app is the canonical starter in examples/basic, retargeted at
+// the installed package. Generating from that one source is what keeps the
+// starter, the documentation, and the smoke tests describing the same app.
+function renderStarter(fileName, title, appId) {
+  const source = fs.readFileSync(path.join(packageRoot, "examples", "basic", fileName), "utf8");
+  const retargeted = source
+    .replace(/require\("\.\.\/\.\.\/runtime"\)/g, 'require("nodeviewjs")')
+    .replace(/require\("\.\.\/\.\.\/runtime"\);/g, 'require("nodeviewjs");');
+  const named = retargeted
+    .replace(/const APP_TITLE = "[^"]*";/, `const APP_TITLE = ${JSON.stringify(title)};`)
+    .replace(/const APP_ID = "[^"]*";/, `const APP_ID = ${JSON.stringify(appId)};`)
+    .replace(/NodeViewJS Starter/g, title)
+    // The note explaining that this file is the shared starter belongs in the
+    // repository, not in the app it generates.
+    .replace(
+      /\/\/ The canonical NodeViewJS starter\.[\s\S]*?\/\/ updates would be wired in\.\n/,
+      `// ${title}, created with \`nodeviewjs create\`.\n`
+    );
+  if (fileName === "app.js" && named.includes('require("../../runtime")')) {
+    throw new Error("The generated starter still points at the repository runtime.");
+  }
+  return named;
+}
+
 function createApp(args) {
   const appName = args[0];
   if (!appName) {
@@ -171,71 +195,8 @@ function createApp(args) {
     }
   }, null, 2)}\n`);
 
-  writeFile(path.join(target, "app.js"), `
-"use strict";
-
-const path = require("node:path");
-const { App } = require("nodeviewjs");
-
-const app = new App({
-  title: "${title}",
-  appId: "${packageName}",
-  width: 900,
-  height: 600,
-  center: true,
-  icon: process.env.NODEVIEW_APP_ICON,
-  entry: path.join(__dirname, "index.html")
-});
-
-app.command("greet", async (name) => {
-  return \`Hello \${name || "there"} from ${title}\`;
-});
-
-app.run();
-`);
-
-  writeFile(path.join(target, "index.html"), `
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>${title}</title>
-    <style>
-      body {
-        font-family: system-ui, sans-serif;
-        margin: 48px;
-      }
-
-      input,
-      button {
-        font: inherit;
-      }
-    </style>
-  </head>
-  <body>
-    <h1>${title}</h1>
-    <p>NodeViewJS is rendering this local file.</p>
-
-    <label>
-      Your name
-      <input id="name" value="Robert" />
-    </label>
-    <button id="greet">Greet</button>
-    <p id="output"></p>
-
-    <script>
-      const nameInput = document.querySelector("#name");
-      const greetButton = document.querySelector("#greet");
-      const output = document.querySelector("#output");
-
-      greetButton.onclick = async () => {
-        output.textContent = await NodeViewJS.invoke("greet", nameInput.value);
-      };
-    </script>
-  </body>
-</html>
-`);
+  writeFile(path.join(target, "app.js"), renderStarter("app.js", title, packageName));
+  writeFile(path.join(target, "index.html"), renderStarter("index.html", title, packageName));
 
   fs.mkdirSync(path.join(target, "assets"), { recursive: true });
   writeFile(path.join(target, "assets", ".gitkeep"), "\n");

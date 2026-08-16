@@ -1,0 +1,5 @@
+{
+  "comment": "SHA-256 digests of the published prebuilt binaries for this release. These ship inside the package so a download host cannot authorise its own binary. Regenerate with `npm run native:checksums` on each release platform, then publish the artifacts under <binaryHost>/<version>/<platform>-<arch>/<file>. An empty artifacts object means no binaries are published for this release and every install builds from source.",
+  "version": "0.1.0",
+  "artifacts": {}
+}

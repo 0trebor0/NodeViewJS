@@ -25,8 +25,16 @@ class NodeViewJSRuntime {
   void OnWindowDestroyed(std::uint32_t id);
   bool IsRunning() const;
 
+  struct WindowCounts {
+    std::size_t tracked;
+    std::size_t live;
+    std::size_t pending_removal;
+  };
+  WindowCounts CountWindows() const;
+
  private:
   void PumpMessages();
+  void PurgeDestroyedWindows();
   void Stop();
 
   std::unique_ptr<RuntimeState> state_;

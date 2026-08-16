@@ -19,6 +19,8 @@ Napi::Object Initialize(Napi::Env env, Napi::Object exports) {
   exports.Set("setWindowPosition", Napi::Function::New(env, nodeview::SetNativeWindowPosition));
   exports.Set("startWindowDrag", Napi::Function::New(env, nodeview::StartNativeWindowDrag));
   exports.Set("getWindowState", Napi::Function::New(env, nodeview::GetNativeWindowState));
+  // Internal diagnostics used by the window-retention test.
+  exports.Set("getWindowCounts", Napi::Function::New(env, nodeview::GetNativeWindowCounts));
   exports.Set("setMenuHandler", Napi::Function::New(env, nodeview::SetNativeMenuHandler));
   exports.Set("setApplicationMenu", Napi::Function::New(env, nodeview::SetNativeApplicationMenu));
   exports.Set("showContextMenu", Napi::Function::New(env, nodeview::ShowNativeContextMenu));

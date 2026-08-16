@@ -148,14 +148,112 @@ async function testCommandFailureAnswersTheFrontend() {
   await settle();
   restoreConsole();
 
+  // The page gets the terse form. Guidance must not travel over IPC: it would
+  // tell an untrusted page about the backend's configuration.
   assert.deepEqual(responses, [
     { version: 1, type: "response", id: 11, ok: false, error: "command failed" },
     { version: 1, type: "response", id: 12, ok: false, error: "Unknown command: missing" }
   ]);
-  assert.deepEqual(reports.map((report) => report.context), ["IPC command 'boom' failed"]);
+  assert.deepEqual(reports.map((report) => report.context), [
+    "IPC command 'boom' failed",
+    "Unknown command 'missing'"
+  ]);
+
+  // The developer gets the explanation in the backend log: what failed, why,
+  // and what to do next.
+  const unknownCommandHelp = reports.at(-1).error.message;
+  assert.match(unknownCommandHelp, /no backend command handles/);
+  assert.match(unknownCommandHelp, /app\.command\("missing"/);
+  assert.match(unknownCommandHelp, /Registered commands: boom/);
+
   assert.deepEqual(unhandledRejections, []);
 
   app.quit();
+}
+
+async function testPermissionDiagnostics() {
+  // Denied by the app policy.
+  {
+    const { app, reports, handleMessage } = startApp((pending) => {
+      pending.command("write", { permission: "fs:write" }, () => "ok");
+    });
+    const restoreConsole = silenceConsoleError();
+    const responses = [];
+    app.mainWindow._post = (message) => responses.push(JSON.parse(message));
+
+    await handleMessage(JSON.stringify({ version: 1, type: "invoke", id: 21, command: "write" }));
+    await settle();
+    restoreConsole();
+
+    assert.equal(responses[0].error, "Permission not granted for command 'write': fs:write");
+    const help = reports.at(-1).error.message;
+    assert.equal(reports.at(-1).context, "Permission denied for command 'write'");
+    assert.match(help, /the app permission policy does not grant/);
+    assert.match(help, /permissions: \["fs:write"\]/);
+    app.quit();
+  }
+
+  // Granted by the app but narrowed away by the window it came from. Saying
+  // which policy denied it is the whole point of the diagnostic.
+  {
+    const app = new App({ entry: __filename, permissions: ["fs:read", "fs:write"] });
+    const reports = captureReports(app);
+    app.command("write", { permission: "fs:write" }, () => "ok");
+    const narrowed = app.createWindow({ title: "Narrowed", permissions: ["fs:read"] });
+    assert.equal(app.run(), true);
+    const restoreConsole = silenceConsoleError();
+    const responses = [];
+    narrowed._post = (message) => responses.push(JSON.parse(message));
+
+    await app._handleWindowMessage(
+      narrowed,
+      JSON.stringify({ version: 1, type: "invoke", id: 22, command: "write" })
+    );
+    await settle();
+    restoreConsole();
+
+    assert.equal(responses[0].ok, false);
+    const help = reports.at(-1).error.message;
+    assert.match(help, /the window permission policy does not grant/);
+    assert.match(help, /the window this call came from narrows it/);
+    assert.match(help, /Window policy: allow \[fs:read\]/);
+    app.quit();
+  }
+}
+
+async function testMalformedMessageDiagnostics() {
+  const { app, reports, handleMessage } = startApp();
+  const restoreConsole = silenceConsoleError();
+
+  // Garbage gets no reply, but the developer is told once — and only a bounded
+  // number of times, so a hostile page cannot flood the log.
+  for (let index = 0; index < 20; index += 1) {
+    await handleMessage(`{"version": 99, "type": "nonsense", "index": ${index}}`);
+  }
+  await settle();
+  restoreConsole();
+
+  const malformed = reports.filter(
+    (report) => report.context === "Malformed frontend message rejected"
+  );
+  assert.equal(malformed.length, 5, "malformed message reports must be rate limited");
+  assert.match(malformed[0].error.message, /did not match the IPC schema/);
+  assert.match(malformed[0].error.message, /NodeViewJS\.invoke\(\)/);
+  assert.match(malformed.at(-1).error.message, /will not be reported/);
+
+  // The quoted message is bounded, whatever the page sent.
+  const { app: floodApp, reports: floodReports, handleMessage: floodHandle } = startApp();
+  const quiet = silenceConsoleError();
+  await floodHandle(`{"junk": "${"x".repeat(50_000)}"}`);
+  await settle();
+  quiet();
+  assert.ok(
+    floodReports.at(-1).error.message.length < 1000,
+    "the quoted message must be bounded"
+  );
+
+  app.quit();
+  floodApp.quit();
 }
 
 async function testFailingErrorReporterDoesNotEscape() {
@@ -294,6 +392,8 @@ async function main() {
   await testHandlerFailuresAreIsolated();
   await testMenuCallbackFailureIsIsolated();
   await testCommandFailureAnswersTheFrontend();
+  await testPermissionDiagnostics();
+  await testMalformedMessageDiagnostics();
   await testFailingErrorReporterDoesNotEscape();
   await testTransientWindowsAreNotRetained();
   testStartupWindowsSurviveAFailedRun();

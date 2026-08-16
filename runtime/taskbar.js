@@ -34,7 +34,7 @@ function normalizeOverlay(icon, description = "") {
     throw new TypeError("Taskbar overlay icon must use the .ico format.");
   }
   if (!fs.existsSync(resolved)) {
-    throw new Error(`Taskbar overlay icon was not found: ${resolved}`);
+    throw new Error(`Taskbar overlay icon was not found: ${safeDiagnosticString(resolved)}`);
   }
   return Object.freeze({ icon: resolved, description });
 }

@@ -19,6 +19,7 @@ void SetNativeWindowSize(const Napi::CallbackInfo& info);
 void SetNativeWindowPosition(const Napi::CallbackInfo& info);
 void StartNativeWindowDrag(const Napi::CallbackInfo& info);
 Napi::Value GetNativeWindowState(const Napi::CallbackInfo& info);
+Napi::Value GetNativeWindowCounts(const Napi::CallbackInfo& info);
 void SetNativeMenuHandler(const Napi::CallbackInfo& info);
 void SetNativeApplicationMenu(const Napi::CallbackInfo& info);
 void ShowNativeContextMenu(const Napi::CallbackInfo& info);

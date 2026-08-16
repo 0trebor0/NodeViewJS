@@ -26,7 +26,7 @@ Maturity differs by platform, and the labels below track what is actually verifi
 
 Independent macOS and Linux reports are welcome — see [PLATFORM-TESTING.md](PLATFORM-TESTING.md). Per-platform gaps are listed in [Known Limitations](wiki/Known-Limitations.md).
 
-`v0.1.0` has not been tagged or published. Installing today builds the native host from source, so a compiler toolchain is required; prebuilt binaries are the next distribution milestone.
+`v0.1.0` has not been tagged or published. Installing today builds the native host from source, so a compiler toolchain is required. The prebuilt-binary install path — download, checksum verification against digests that ship inside the package, and source fallback — is implemented and tested; what remains is publishing the artifacts. See [Packaging and Distribution](wiki/Packaging-and-Distribution.md).
 
 ## Install
 
@@ -153,6 +153,7 @@ The page is untrusted; the Node.js backend is trusted. The WebView gets no `requ
 - [Security Model](wiki/Security-Model.md) and [Known Limitations](wiki/Known-Limitations.md)
 - [Testing](wiki/Testing.md) — unit, native, bridge, packaging, and security suites
 - [Troubleshooting](wiki/Troubleshooting.md)
+- [The starter app](examples/basic) — the canonical sample, and exactly what `nodeviewjs create` generates
 - [Single-page guide](docs/index.html) — the same material in one HTML file
 - [PLAN.md](PLAN.md) — roadmap and improvement plan
 

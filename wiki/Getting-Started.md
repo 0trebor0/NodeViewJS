@@ -9,8 +9,22 @@
 - macOS 12 or newer: Xcode command-line tools with the macOS SDK
 - Linux: GTK 3 and WebKitGTK 4.1 development/runtime packages, and `pkg-config`
 
-NodeViewJS builds its native host during installation, so a compiler toolchain
-is required today. Prebuilt binaries are planned; see `PLAN.md`.
+NodeViewJS installs its native host in one of two ways. If the release publishes
+a prebuilt binary for your platform, `npm install` downloads and verifies it and
+no compiler is needed. Otherwise it compiles from source, which needs the
+toolchain listed above.
+
+**No prebuilt binaries are published yet**, so every install currently compiles.
+The install path itself is in place and tested; what remains is publishing the
+artifacts. See [[Packaging and Distribution]] for how verification works and what
+a maintainer publishes.
+
+To force a source build even when a binary is available:
+
+```powershell
+$env:NODEVIEW_BUILD_FROM_SOURCE = "1"
+npm install
+```
 
 On Ubuntu 24.04:
 
@@ -57,7 +71,18 @@ npm install
 npm run dev
 ```
 
-For a manual application, install NodeViewJS and create two files.
+This generates the canonical starter: a small notes application that exercises
+the recommended architecture end to end — window creation, a declared permission
+policy, one validated backend command per privileged operation, a
+backend-to-frontend event, a native menu, packaging configuration, error
+handling, and a commented update stub showing where `Updater` is wired in.
+
+The same application lives in the repository at `examples/basic`, runs with
+`npm start`, and is what the packaging smoke test exercises. It is the one
+sample to read; the snippets elsewhere in these pages are extracts, not
+alternatives.
+
+For the smallest possible application, install NodeViewJS and create two files.
 
 `app.js`:
 

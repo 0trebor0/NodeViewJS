@@ -92,11 +92,44 @@ using nodeview::WebViewState;
 constexpr wchar_t kAppVirtualHost[] = L"app.nodeview.example";
 constexpr wchar_t kAppVirtualOrigin[] = L"https://app.nodeview.example/";
 
-void ReportWebViewError(const WebViewState& state, const wchar_t* message) {
+void ShowWebViewError(const WebViewState& state, const wchar_t* message) {
   fwprintf(stderr, L"[NodeViewJS native] %ls\n", message);
   fflush(stderr);
   if (GetEnvironmentVariableW(L"NODEVIEW_NATIVE_TRACE", nullptr, 0) != 0) return;
   MessageBox(state.window, message, L"NodeViewJS", MB_OK | MB_ICONERROR);
+}
+
+// A bare HRESULT tells a developer nothing. These are the failures that
+// actually happen, each answered with the command that fixes it.
+const wchar_t* ExplainWebViewFailure(HRESULT result) {
+  switch (static_cast<unsigned long>(result)) {
+    case 0x80040154UL:  // REGDB_E_CLASSNOTREG
+    case 0x80070002UL:  // ERROR_FILE_NOT_FOUND
+      return L"\n\nThe Microsoft Edge WebView2 Runtime does not appear to be installed.\n"
+             L"NodeViewJS renders every window with it.\n\n"
+             L"Install it:\n"
+             L"    winget install Microsoft.EdgeWebView2Runtime\n\n"
+             L"Then confirm the prerequisites:\n"
+             L"    npx nodeviewjs doctor";
+    case 0x800700AAUL:  // ERROR_BUSY
+      return L"\n\nAnother process is already using this application's WebView2 profile.\n"
+             L"Close the other instance, or give this application a different appId "
+             L"so it uses its own profile.";
+    case 0x80070005UL:  // E_ACCESSDENIED
+      return L"\n\nAccess to the WebView2 data directory was denied.\n"
+             L"Check that %LOCALAPPDATA%\\NodeViewJS is writable by this user.";
+    default:
+      return L"\n\nRun `npx nodeviewjs doctor` to check the WebView2 Runtime "
+             L"and the other prerequisites.";
+  }
+}
+
+void ReportWebViewError(const WebViewState& state, const wchar_t* message) {
+  const std::wstring details =
+      std::wstring(message) +
+      L"\n\nRun `npx nodeviewjs doctor` to check the WebView2 Runtime "
+      L"and the other prerequisites.";
+  ShowWebViewError(state, details.c_str());
 }
 
 void TraceWebView(const wchar_t* message) {
@@ -137,8 +170,9 @@ void ReportWebViewError(
     const WebViewState& state,
     const wchar_t* message,
     HRESULT result) {
-  const std::wstring details = std::wstring(message) + L" (HRESULT: " + FormatHResult(result) + L").";
-  ReportWebViewError(state, details.c_str());
+  const std::wstring details = std::wstring(message) + L" (HRESULT: " + FormatHResult(result) + L")." +
+                               ExplainWebViewFailure(result);
+  ShowWebViewError(state, details.c_str());
 }
 
 std::wstring MakeFileUrl(const std::wstring& file_path) {

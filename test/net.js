@@ -303,6 +303,14 @@ async function testAppIntegration() {
   );
 }
 
+// Regression: a sparse array used to reach the allowlist unvalidated, because
+// map() skips holes. The allowlist guards every outbound request.
+assert.throws(() => net.normalizeAllowedOrigins(new Array(4)), /must not contain empty items/);
+assert.throws(
+  () => net.normalizeAllowedOrigins(["https://api.example.com", , "https://b.example.com"]),
+  /must not contain empty items/
+);
+
 Promise.all([
   testRequestValidation(),
   testUnlistedHostsRefused(),

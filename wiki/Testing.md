@@ -31,6 +31,76 @@ unsubscribing releases its event name. `test:exports` checks that only the
 documented entry points resolve from an installed package. `test:types`
 type-checks `types/test-d.ts` against the shipped declarations.
 
+## Release candidate
+
+```powershell
+npm run test:rc
+```
+
+The gate every release candidate has to survive, run against the package as it
+would actually be published rather than against this source tree:
+
+1. pack with `npm pack` and install the tarball into a clean project;
+2. generate an application with the installed CLI;
+3. run it — a real window opens;
+4. frontend to backend IPC through a permission-gated command;
+5. backend to frontend events, acknowledged by the page;
+6. a clean exit with the expected status;
+7. package that application with the installed CLI;
+8. verify every entry in the packaged integrity manifest by recomputing its
+   size and SHA-256;
+9. verify signed update metadata through the installed package, including that
+   a tampered manifest is refused.
+
+Steps 3 to 6 open a native window, so run it from an interactive desktop
+session. Step 7 is Windows-only. `npm run test:full` ends with this gate.
+
+By default the native addon is copied from this repository's `build/nodeview`
+rather than recompiled inside the temporary project, which keeps the gate to
+about a minute and exercises the packaged JavaScript, CLI, and runtime. To
+compile it inside the project instead and exercise the real install path end to
+end:
+
+```powershell
+$env:NODEVIEW_RC_BUILD = "1"
+npm run test:rc
+```
+
+On failure the temporary workspace is kept and its path printed, so the
+half-built application can be inspected.
+
+## Trust boundary fuzzing
+
+```powershell
+npm run test:fuzz
+```
+
+Seeded, structure-aware malformed input for every validator on a trust
+boundary: IPC parsing and serialization, permission policies, protocol and
+file-association manifests, launch arguments, menu and tray templates, update
+metadata, package integrity manifests, the network origin allowlist, and the
+whole inbound frontend message path.
+
+Four properties are enforced for each target:
+
+1. the call returns or throws — it never leaves the process;
+2. a rejection is a real `Error` with a bounded, usable message;
+3. no input reaches `Object.prototype` or `Array.prototype`;
+4. anything accepted satisfies that validator's own contract.
+
+The seed is printed on every run. Pin it to reproduce a failure, and raise the
+iteration count to search harder:
+
+```powershell
+$env:NODEVIEW_FUZZ_SEED = "1337"
+$env:NODEVIEW_FUZZ_ITERATIONS = "5000"
+npm run test:fuzz
+```
+
+Fixed corpus samples in `test/fixtures/security-corpus.json` remain the
+regression floor: those exact inputs must always be rejected, whatever a given
+seed happens to generate.
+
 ## Packed artifact
 
 ```powershell
@@ -50,12 +120,20 @@ npm run test:bridge
 The bridge suite includes native lifecycle, ordinary integration, and the parameter/stress matrix. It verifies supported JSON values, Unicode, missing payloads, undefined results, errors, 250 KB round trips, unsupported values, 64-way concurrency, event acknowledgements, pre-run events, and repeated reloads.
 
 ```powershell
+npm run test:window-retention
 npm run test:bridge-matrix
 npm run test:ipc-security-integration
 npm run test:trusted-document
 npm run test:webview-capabilities
 npm run test:multi-window
 ```
+
+`npm run test:window-retention` opens and closes forty native windows and then
+asserts, through an internal diagnostics binding, that the native host is
+tracking exactly one window again. It is the native half of the window
+lifecycle work: closed windows are queued by `OnWindowDestroyed` and released by
+the next message pump, because they cannot be freed while their own window
+procedure is still executing.
 
 `npm run test:native` runs the bridge suite plus the raw WebMessage diagnostic and every integration listed above in one pass.
 

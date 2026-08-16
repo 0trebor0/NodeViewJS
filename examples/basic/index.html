@@ -3,20 +3,97 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>NodeViewJS Media Loader</title>
+    <title>NodeViewJS Starter</title>
+    <style>
+      :root { color-scheme: light dark; }
+      body {
+        font-family: system-ui, sans-serif;
+        margin: 0;
+        padding: 32px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        height: 100vh;
+        box-sizing: border-box;
+      }
+      h1 { font-size: 1.25rem; margin: 0; }
+      p { margin: 0; opacity: 0.75; font-size: 0.9rem; }
+      textarea {
+        flex: 1;
+        font: inherit;
+        padding: 12px;
+        resize: none;
+        border-radius: 6px;
+        border: 1px solid rgba(128, 128, 128, 0.4);
+        background: transparent;
+        color: inherit;
+      }
+      .row { display: flex; align-items: center; gap: 12px; }
+      button { font: inherit; padding: 6px 14px; border-radius: 6px; }
+      #status { font-size: 0.9rem; opacity: 0.75; }
+      #status[data-state="error"] { color: #c42b1c; opacity: 1; }
+    </style>
   </head>
 
   <body>
-    <h1 id="title"></h1>
+    <h1>NodeViewJS Starter</h1>
+    <p>The page has no filesystem access. It calls backend commands, which validate and do the work.</p>
+
+    <textarea id="note" placeholder="Type a note, then save it with the button or Ctrl+S."></textarea>
+
+    <div class="row">
+      <button id="save">Save note</button>
+      <span id="status">Loading…</span>
+    </div>
+
     <script>
-      window.onload = async () => {
-        NodeViewJS.on("hey", data => {
-          console.log(data);
-          document.getElementById("title").innerText = data.msg;
-        });
-        const result = await NodeViewJS.invoke("greet", "World");
-        console.log(result);
+      const note = document.querySelector("#note");
+      const saveButton = document.querySelector("#save");
+      const status = document.querySelector("#status");
+
+      function setStatus(message, state) {
+        status.textContent = message;
+        if (state) status.dataset.state = state;
+        else delete status.dataset.state;
       }
+
+      // invoke() rejects when the command is unknown, unauthorized, throws, or
+      // times out. Always handle that.
+      async function save() {
+        saveButton.disabled = true;
+        try {
+          await NodeViewJS.invoke("note:save", { text: note.value });
+        } catch (error) {
+          setStatus(`Could not save: ${error.message}`, "error");
+        } finally {
+          saveButton.disabled = false;
+        }
+      }
+
+      // Backend to frontend: the menu item asks this page to save, and the
+      // backend confirms once the note is written.
+      NodeViewJS.on("menu:save", save);
+      NodeViewJS.on("note:saved", ({ savedAt }) => {
+        setStatus(`Saved at ${new Date(savedAt).toLocaleTimeString()}`);
+      });
+
+      saveButton.addEventListener("click", save);
+      note.addEventListener("keydown", (event) => {
+        if (event.key === "s" && (event.ctrlKey || event.metaKey)) {
+          event.preventDefault();
+          save();
+        }
+      });
+
+      window.addEventListener("load", async () => {
+        try {
+          const stored = await NodeViewJS.invoke("note:load");
+          note.value = stored.text;
+          setStatus(stored.text ? "Loaded your saved note." : "No note saved yet.");
+        } catch (error) {
+          setStatus(`Could not load: ${error.message}`, "error");
+        }
+      });
     </script>
   </body>
 </html>

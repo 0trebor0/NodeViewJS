@@ -925,6 +925,51 @@ async function testBridgeLifecycleMessages() {
   assert.equal(closingWindow.isClosed, true);
 }
 
+{
+  // Regression: map() skips holes, so a sparse array used to walk through the
+  // per-item validators with nothing validated.
+  assert.throws(
+    () => new App({ entry: __filename, permissions: new Array(3) }),
+    /must not contain empty items/
+  );
+  assert.throws(
+    () => new App({ entry: __filename, permissions: { allow: ["fs:read", , "fs:write"] } }),
+    /must not contain empty items/
+  );
+  assert.throws(
+    () => new App({ entry: __filename, permissions: { allow: [], deny: new Array(2) } }),
+    /must not contain empty items/
+  );
+  assert.throws(
+    () => new App({ entry: __filename, protocols: new Array(2) }),
+    /must not contain empty items/
+  );
+  assert.throws(
+    () => new App({ entry: __filename, fileAssociations: [".myapp", , ".other"] }),
+    /must not contain empty items/
+  );
+  const sparseCommandApp = new App({ entry: __filename, permissions: ["fs:*"] });
+  assert.throws(
+    () => sparseCommandApp.command("sparse", { permissions: ["fs:read", , "fs:write"] }, () => {}),
+    /must not contain empty items/
+  );
+
+  // Regression: a rejected value is quoted in the error message, so an
+  // over-long one must not put its whole contents into the backend log.
+  const longPermission = `fs:read:${"a".repeat(9000)}!`;
+  assert.throws(
+    () => new App({ entry: __filename, permissions: [longPermission] }),
+    (error) => error.message.length < 400
+      && error.message.includes("...")
+      && / \(\d+ characters\)/.test(error.message)
+  );
+  // A value inside the bound is still quoted in full.
+  assert.throws(
+    () => new App({ entry: __filename, permissions: ["fs:read:not valid"] }),
+    /fs:read:not valid/
+  );
+}
+
 Promise.all([
   testConfig(),
   testDevWatcher(),

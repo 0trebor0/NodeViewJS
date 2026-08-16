@@ -4,6 +4,8 @@
 // WebView, so the request is validated before it reaches the network and the
 // response is bounded before it reaches the frontend.
 
+const { assertDenseArray } = require("./validation");
+
 const CONTROL_CHARACTER_PATTERN = /[\u0000-\u001F\u007F]/;
 const HEADER_NAME_PATTERN = /^[A-Za-z0-9!#$%&'*+.^_`|~-]+$/;
 const METHODS = new Set(["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"]);
@@ -80,6 +82,9 @@ function normalizeAllowedOrigins(value) {
   if (value.length > MAX_ORIGINS) {
     throw new RangeError(`allowedOrigins must contain at most ${MAX_ORIGINS} entries.`);
   }
+  // map() skips holes, so a sparse array would put unvalidated entries into the
+  // allowlist that guards every outbound request.
+  assertDenseArray(value, "allowedOrigins");
   const origins = value.map(normalizeOrigin);
   return Object.freeze([...new Set(origins)]);
 }

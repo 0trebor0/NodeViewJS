@@ -44,6 +44,9 @@ const PERMISSION_GROUPS = new Set(
 const PERMISSION_SCOPE_PATTERN = /^[a-zA-Z0-9](?:[a-zA-Z0-9._/-]*[a-zA-Z0-9])?$/;
 const PLUGIN_NAME_PATTERN = /^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$/;
 const PLUGIN_MEMBER_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/;
+// A hostile page can post malformed messages indefinitely, so the diagnostic
+// for them is capped per application rather than written on every message.
+const MAX_MALFORMED_MESSAGE_REPORTS = 5;
 
 let nativeAddon;
 
@@ -736,6 +739,7 @@ class App {
   #eventHandlers = new Map();
   #hasRun = false;
   #ipcRequestStates = new WeakMap();
+  #malformedMessageReports = 0;
   #permissions;
   #plugins = new Map();
   #pluginsDisposed = false;
@@ -1222,6 +1226,28 @@ class App {
   async _handleWindowMessage(window, serializedMessage) {
     const message = ipc.parseMessage(serializedMessage);
     if (!message) {
+      // Rejecting the message stays silent towards the page: garbage gets no
+      // reply. The developer, though, was previously given nothing at all, so
+      // a bounded diagnostic goes to the backend log. It is rate limited
+      // because a hostile page could otherwise flood the log at will.
+      if (this.#malformedMessageReports < MAX_MALFORMED_MESSAGE_REPORTS) {
+        this.#malformedMessageReports += 1;
+        const remaining = MAX_MALFORMED_MESSAGE_REPORTS - this.#malformedMessageReports;
+        this._reportError(
+          "Malformed frontend message rejected",
+          new Error([
+            "A message from the page did not match the IPC schema and was dropped.",
+            `Message: ${safeDiagnosticString(serializedMessage)}`,
+            "Messages must use protocol version 1, an exact invoke/event schema, "
+              + "JSON-safe payloads, and stay within the documented size, depth, and "
+              + "name limits. Use NodeViewJS.invoke() and NodeViewJS.emit() rather than "
+              + "posting to the transport directly.",
+            remaining === 0
+              ? "Further malformed messages will not be reported."
+              : `${remaining} further report(s) will be made.`
+          ].join("\n"))
+        );
+      }
       return;
     }
 
@@ -1261,6 +1287,49 @@ class App {
   // event name instead of leaving an empty handler set behind.
   _eventNames() {
     return [...this.#eventHandlers.keys()];
+  }
+
+  // Diagnostics answer three questions: what failed, why, and what to do next.
+  // They go to the backend log rather than to the page.
+  #unknownCommandHelp(name) {
+    const registered = [...this.#commands.keys()];
+    const lines = [
+      `The page invoked '${safeDiagnosticString(name)}', which no backend command handles.`,
+      "Register it before app.run():",
+      `  app.command(${JSON.stringify(safeDiagnosticString(name))}, (payload) => { ... });`
+    ];
+    if (registered.length === 0) {
+      lines.push("This app has registered no commands at all.");
+    } else {
+      const shown = registered.slice(0, 10).join(", ");
+      lines.push(`Registered commands: ${shown}${registered.length > 10 ? ", ..." : ""}`);
+    }
+    return lines.join("\n");
+  }
+
+  #permissionHelp(name, permission, windowPolicy) {
+    // Naming which policy denied it saves the common confusion of granting a
+    // permission app-wide and still being refused by a narrowed window.
+    const deniedByApp = !hasPermission(this.#permissions, permission);
+    const lines = [
+      `Command '${safeDiagnosticString(name)}' requires '${permission}', which the `
+        + `${deniedByApp ? "app" : "window"} permission policy does not grant.`
+    ];
+    if (deniedByApp) {
+      lines.push(
+        "Grant it in the App options:",
+        `  new App({ entry, permissions: [${JSON.stringify(permission)}] })`,
+        "A policy object can also deny it explicitly, and deny always wins."
+      );
+    } else {
+      lines.push(
+        "The app grants it, but the window this call came from narrows it:",
+        `  app.createWindow({ entry, permissions: [${JSON.stringify(permission)}] })`,
+        `Window policy: allow [${[...windowPolicy.allow].join(", ") || "none"}]`
+          + `, deny [${[...windowPolicy.deny].join(", ") || "none"}]`
+      );
+    }
+    return lines.join("\n");
   }
 
   // The single dispatch path for application, window, and menu events. A
@@ -1336,17 +1405,25 @@ class App {
     const command = this.#commands.get(message.command);
     try {
       if (!command) {
+        // The page gets the terse form; the developer gets the explanation in
+        // the backend log, where a hostile page cannot read it.
+        this._reportError(
+          `Unknown command '${safeDiagnosticString(message.command)}'`,
+          new Error(this.#unknownCommandHelp(message.command))
+        );
         throw new Error(`Unknown command: ${message.command}`);
       }
 
+      const windowPolicy = this.#windowPermissionPolicies.get(window) ?? this.#permissions;
       const missingPermission = command.permissions.find(
         (permission) => !hasPermission(this.#permissions, permission)
-          || !hasPermission(
-            this.#windowPermissionPolicies.get(window) ?? this.#permissions,
-            permission
-          )
+          || !hasPermission(windowPolicy, permission)
       );
       if (missingPermission) {
+        this._reportError(
+          `Permission denied for command '${safeDiagnosticString(message.command)}'`,
+          new Error(this.#permissionHelp(message.command, missingPermission, windowPolicy))
+        );
         throw new Error(`Permission not granted for command '${message.command}': ${missingPermission}`);
       }
 

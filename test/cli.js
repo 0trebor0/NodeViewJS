@@ -110,25 +110,86 @@ assert.ok(fs.existsSync(path.join(createRoot, "StarterApp", "assets", ".gitkeep"
 assert.ok(fs.existsSync(path.join(createRoot, "StarterApp", "assets", "README.md")));
 assert.match(fs.readFileSync(path.join(createRoot, "StarterApp", "package.json"), "utf8"), /"package": "nodeviewjs package"/);
 
+// examples/basic is the canonical starter: it runs against the repository
+// runtime and is what `nodeviewjs create` generates.
 const basicBackend = fs.readFileSync(path.join(__dirname, "..", "examples", "basic", "app.js"), "utf8");
 const basicFrontend = fs.readFileSync(path.join(__dirname, "..", "examples", "basic", "index.html"), "utf8");
-assert.match(basicBackend, /app\.command\("greet", \(name\) =>/);
-assert.match(basicBackend, /return `Hello \$\{name\}`/);
-assert.match(basicFrontend, /NodeViewJS\.invoke\("greet", "World"\)/);
-assert.doesNotMatch(basicFrontend, /result\.message/);
+assert.match(basicBackend, /require\("\.\.\/\.\.\/runtime"\)/);
+assert.match(basicBackend, /app\.command\("note:save", \{ permission: "fs:write" \}/);
+assert.match(basicBackend, /app\.emit\("note:saved"/);
+assert.match(basicFrontend, /NodeViewJS\.invoke\("note:load"\)/);
 assert.match(fs.readFileSync(path.join(createRoot, "StarterApp", "package.json"), "utf8"), /"installer": "nodeviewjs installer"/);
 assert.match(fs.readFileSync(path.join(createRoot, "StarterApp", "package.json"), "utf8"), /"update:manifest": "nodeviewjs update-manifest"/);
-assert.match(
-  fs.readFileSync(path.join(createRoot, "StarterApp", "app.js"), "utf8"),
-  /app\.command\("greet", async \(name\)/
+// The generated app is the canonical starter from examples/basic, retargeted
+// at the installed package. These assertions pin that relationship: if the two
+// drift, the documentation and the smoke tests stop describing the same app.
+const generatedApp = fs.readFileSync(path.join(createRoot, "StarterApp", "app.js"), "utf8");
+const generatedPage = fs.readFileSync(path.join(createRoot, "StarterApp", "index.html"), "utf8");
+const starterApp = fs.readFileSync(path.join(__dirname, "..", "examples", "basic", "app.js"), "utf8");
+const starterPage = fs.readFileSync(path.join(__dirname, "..", "examples", "basic", "index.html"), "utf8");
+
+// Retargeted at the package, with no path back into the repository.
+assert.match(generatedApp, /require\("nodeviewjs"\)/);
+assert.equal(generatedApp.includes("../../runtime"), false);
+assert.equal(generatedApp.includes("canonical NodeViewJS starter"), false);
+assert.match(generatedApp, /created with `nodeviewjs create`/);
+
+// Named after the created app rather than the starter.
+assert.match(generatedApp, /const APP_TITLE = "Starter App";/);
+assert.match(generatedApp, /const APP_ID = "starter-app";/);
+assert.equal(generatedApp.includes("NodeViewJS Starter"), false);
+assert.equal(generatedPage.includes("NodeViewJS Starter"), false);
+assert.match(generatedPage, /<title>Starter App<\/title>/);
+
+// The generated file must be valid JavaScript.
+new (require("node:vm").Script)(generatedApp, { filename: "app.js" });
+
+// Everything the starter is supposed to demonstrate survives generation.
+for (const [label, pattern] of [
+  ["a declared permission policy", /permissions: \["fs:read", "fs:write"\]/],
+  ["a native menu", /menu: \[/],
+  ["a permission-gated read command", /app\.command\("note:load", \{ permission: "fs:read" \}/],
+  ["a permission-gated write command", /app\.command\("note:save", \{ permission: "fs:write" \}/],
+  ["payload validation", /function requireText\(payload\)/],
+  ["a backend-to-frontend event", /app\.emit\("note:saved"/],
+  ["a menu event handler", /app\.on\("menu", /],
+  ["an update configuration stub", /const updater = new Updater\(\{/],
+  ["error handling around notifications", /Notification unavailable/]
+]) {
+  assert.match(generatedApp, pattern, `generated app is missing ${label}`);
+}
+
+for (const [label, pattern] of [
+  ["a command call", /NodeViewJS\.invoke\("note:save"/],
+  ["an event subscription", /NodeViewJS\.on\("note:saved"/],
+  ["rejection handling", /catch \(error\) \{/]
+]) {
+  assert.match(generatedPage, pattern, `generated page is missing ${label}`);
+}
+
+// The starter and the generated app differ only by the retargeting: comments,
+// the two name constants, the require path, and the title. Normalizing those
+// away, the files must be identical, so neither can quietly drift.
+function normalizeStarter(source) {
+  return source
+    .split(/\r?\n/)
+    .map((line) => line.trimEnd())
+    .filter((line) => line.length > 0 && !line.trimStart().startsWith("//"))
+    .filter((line) => !line.startsWith("const APP_TITLE") && !line.startsWith("const APP_ID"))
+    .map((line) => line.split("../../runtime").join("nodeviewjs"))
+    .map((line) => line.split("NodeViewJS Starter").join("Starter App"))
+    .join("\n");
+}
+
+assert.equal(
+  normalizeStarter(generatedApp),
+  normalizeStarter(starterApp),
+  "the generated app has drifted from examples/basic/app.js"
 );
-assert.match(
-  fs.readFileSync(path.join(createRoot, "StarterApp", "index.html"), "utf8"),
-  /NodeViewJS\.invoke\("greet", nameInput\.value\)/
-);
-assert.match(
-  fs.readFileSync(path.join(createRoot, "StarterApp", "index.html"), "utf8"),
-  /const nameInput = document\.querySelector\("#name"\)/
+assert.equal(
+  normalizeStarter(generatedPage),
+  normalizeStarter(starterPage),
+  "the generated page has drifted from examples/basic/index.html"
 );
 
 const blocked = spawnSync(process.execPath, [cli, "create", "StarterApp"], {

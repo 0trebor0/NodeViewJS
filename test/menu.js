@@ -77,4 +77,23 @@ assert.throws(
   /Only checkbox/
 );
 
+// Regression: Array.prototype.map skips holes, so a sparse template used to
+// produce a menu whose items were never validated.
+assert.throws(() => normalizeMenuTemplate(new Array(3)), /must not contain empty items/);
+assert.throws(
+  () => normalizeMenuTemplate([{ id: "ok", label: "Ok" }, , { id: "two", label: "Two" }]),
+  /must not contain empty items/
+);
+assert.throws(
+  () => normalizeMenuTemplate([{ label: "File", submenu: new Array(2) }]),
+  /must not contain empty items/
+);
+
+// Regression: rejected values are quoted in the error, so the quote is bounded.
+const longMenuOption = "x".repeat(5000);
+assert.throws(
+  () => normalizeMenuTemplate([{ id: "a", label: "A", [longMenuOption]: 1 }]),
+  (error) => error.message.length < 400 && /\(5000 characters\)/.test(error.message)
+);
+
 console.log("Menu template test passed.");

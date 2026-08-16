@@ -1,5 +1,53 @@
 # Packaging and Distribution
 
+## Prebuilt native binaries
+
+Installing NodeViewJS runs `scripts/install-native.js`, which prefers a
+published binary over a local compile so that `npm install nodeviewjs` does not
+require a C++ toolchain.
+
+The trust model is the important part:
+
+- Expected SHA-256 digests live in `native-checksums.json`, which ships **inside
+  the package**. Digests are never read from the download host, so a compromised
+  or substituted host cannot authorise its own binary.
+- The host must be `https` and must not carry credentials. Redirects are refused
+  rather than followed, because a redirect sends the install somewhere the
+  configuration did not name.
+- An artifact that is missing, unreachable, oversized, or not listed for this
+  target **falls back to a source build**. That is a normal outcome.
+- An artifact whose digest does not match **fails the install**. It does not fall
+  back: a wrong digest means the bytes are not the ones this package expects, and
+  quietly compiling instead would hide that. Nothing is written to disk unless
+  every file for the target verifies first.
+
+A successful prebuilt install records `build/nodeview/provenance.json` with the
+target, version, and host it came from.
+
+Configure the host with `NODEVIEW_BINARY_HOST`, the `nodeview_binary_host` npm
+config value, or `nodeviewjs.binaryHost` in `package.json`. Artifacts are fetched
+from `<host>/<version>/<platform>-<arch>/<file>`.
+
+### Publishing a release (maintainers)
+
+No binaries are published yet. When they are, on each release platform:
+
+```powershell
+npm run build
+npm run native:checksums
+```
+
+That records this platform's digests into `native-checksums.json` under its
+`<platform>-<arch>` key. Commit the updated file, then upload the matching
+`build/nodeview/` files to `<host>/<version>/<platform>-<arch>/`. A target with
+no entry in the file is simply not offered as a prebuilt, so platforms can be
+added one at a time.
+
+Targets: `win32-x64`, `win32-arm64`, `darwin-x64`, `darwin-arm64`, `linux-x64`,
+and `linux-arm64`. The addon is built with node-addon-api, so one artifact per
+platform and architecture works across Node major versions.
+
+
 ## Portable packages
 
 ```powershell

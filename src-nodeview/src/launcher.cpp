@@ -364,10 +364,26 @@ bool VerifyIntegrity(
   return true;
 }
 
+// The audience for an integrity failure is whoever is trying to run the app,
+// not a developer, so the guidance is about recovering the installation rather
+// than about the build.
+std::wstring ExplainIntegrityFailure(const std::wstring& message, const std::wstring& log_path) {
+  return message +
+         L"\n\nThe application will not start, because its files no longer match the ones "
+         L"it was published with.\n\n"
+         L"This usually means a file was modified, replaced, or corrupted after "
+         L"installation, or that antivirus software quarantined one of them.\n\n"
+         L"What to do:\n"
+         L"    \x2022 Reinstall the application from its original installer or download.\n"
+         L"    \x2022 If you packaged it yourself, run the packaging step again.\n\n"
+         L"Details: " + log_path;
+}
+
 void ReportError(
-    const std::wstring& message,
+    const std::wstring& raw_message,
     const std::wstring& resources_directory,
     const std::wstring& log_path) {
+  const std::wstring message = ExplainIntegrityFailure(raw_message, log_path);
   const DWORD root_attributes = GetFileAttributesW(resources_directory.c_str());
   const DWORD log_attributes = GetFileAttributesW(log_path.c_str());
   const bool safe_log = root_attributes != INVALID_FILE_ATTRIBUTES &&

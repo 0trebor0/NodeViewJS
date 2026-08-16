@@ -18,6 +18,10 @@ namespace nodeview {
 struct RuntimeState {
   std::map<std::uint32_t, std::unique_ptr<NativeWindow>> windows;
   std::set<std::uint32_t> live_windows;
+  // A destroyed window cannot be erased while its own window procedure is
+  // still running, so its id waits here until the next message pump.
+  std::set<std::uint32_t> pending_removal;
+
   std::uint32_t next_window_id = 1;
   uv_timer_t* message_timer = nullptr;
   bool com_initialized = false;
@@ -73,6 +77,10 @@ NativeWindow& NodeViewJSRuntime::PrimaryWindow(Napi::Env env) {
 void NodeViewJSRuntime::CloseWindow(Napi::Env env, std::uint32_t id) {
   const auto window = state_->windows.find(id);
   if (window == state_->windows.end()) {
+    // Ids are handed out in order, so an id below the next one was created and
+    // has since been destroyed and purged. Closing it again is a no-op, exactly
+    // as it was before the object was released.
+    if (id > 0 && id < state_->next_window_id) return;
     throw Napi::RangeError::New(env, "Unknown window id.");
   }
   if (state_->live_windows.contains(id)) {
@@ -136,14 +144,41 @@ void NodeViewJSRuntime::CloseAll() {
   for (const std::uint32_t id : ids) {
     state_->windows.at(id)->Close();
   }
+  PurgeDestroyedWindows();
 }
 
 void NodeViewJSRuntime::OnWindowDestroyed(std::uint32_t id) {
   state_->live_windows.erase(id);
+  // This runs from inside the window's own WM_DESTROY handling, so the object
+  // is still executing. Erasing it here would free it under its own feet;
+  // PurgeDestroyedWindows() does it from the message pump instead.
+  state_->pending_removal.insert(id);
   if (state_->running && state_->live_windows.empty()) {
     Stop();
     PostQuitMessage(0);
   }
+}
+
+// Releases the windows queued by OnWindowDestroyed. Only ever called from
+// outside a window procedure: the message pump, CloseAll, and Stop.
+void NodeViewJSRuntime::PurgeDestroyedWindows() {
+  if (state_->pending_removal.empty()) return;
+  const std::vector<std::uint32_t> ids(
+      state_->pending_removal.begin(),
+      state_->pending_removal.end());
+  state_->pending_removal.clear();
+  for (const std::uint32_t id : ids) {
+    state_->windows.erase(id);
+  }
+}
+
+// Internal diagnostics: lets a test prove that closed windows are actually
+// released rather than accumulating for the life of the process.
+NodeViewJSRuntime::WindowCounts NodeViewJSRuntime::CountWindows() const {
+  return WindowCounts{
+      state_->windows.size(),
+      state_->live_windows.size(),
+      state_->pending_removal.size()};
 }
 
 bool NodeViewJSRuntime::IsRunning() const {
@@ -151,6 +186,10 @@ bool NodeViewJSRuntime::IsRunning() const {
 }
 
 void NodeViewJSRuntime::PumpMessages() {
+  // Runs before any DispatchMessage below, so nothing here is nested inside a
+  // window procedure.
+  PurgeDestroyedWindows();
+
   const std::vector<std::uint32_t> ids(
       state_->live_windows.begin(),
       state_->live_windows.end());
@@ -191,6 +230,17 @@ void NodeViewJSRuntime::Stop() {
     CoUninitialize();
     state_->com_initialized = false;
   }
+}
+
+Napi::Value GetNativeWindowCounts(const Napi::CallbackInfo& info) {
+  const NodeViewJSRuntime::WindowCounts counts = GetRuntime().CountWindows();
+  Napi::Object result = Napi::Object::New(info.Env());
+  result.Set("tracked", Napi::Number::New(info.Env(), static_cast<double>(counts.tracked)));
+  result.Set("live", Napi::Number::New(info.Env(), static_cast<double>(counts.live)));
+  result.Set(
+      "pendingRemoval",
+      Napi::Number::New(info.Env(), static_cast<double>(counts.pending_removal)));
+  return result;
 }
 
 NodeViewJSRuntime& GetRuntime() {

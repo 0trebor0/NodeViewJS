@@ -157,7 +157,13 @@ function validateManifest(manifest, options) {
     options.publicKey,
     signature
   )) {
-    throw new Error("Update manifest signature verification failed.");
+    throw new Error([
+      "Update manifest signature verification failed.",
+      "The manifest is well formed, but it was not signed by the key this app trusts.",
+      "Either the manifest was signed with a different private key than the publicKey",
+      "configured on the Updater, or it was modified after signing.",
+      "Regenerate it with `nodeviewjs update-manifest` using the matching private key."
+    ].join("\n"));
   }
 
   return Object.freeze({ ...manifest });
