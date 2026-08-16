@@ -44,8 +44,22 @@ no entry in the file is simply not offered as a prebuilt, so platforms can be
 added one at a time.
 
 Targets: `win32-x64`, `win32-arm64`, `darwin-x64`, `darwin-arm64`, `linux-x64`,
-and `linux-arm64`. The addon is built with node-addon-api, so one artifact per
-platform and architecture works across Node major versions.
+and `linux-arm64`.
+
+One artifact per platform and architecture serves every supported Node release,
+because the addon is built against a pinned N-API version rather than whatever
+the build machine happened to offer:
+
+```
+"defines": ["NAPI_VERSION=8", "NAPI_CPP_EXCEPTIONS"]
+```
+
+N-API 8 is available in every Node.js release this package supports, and
+`npm run test:napi` fails if the addon ever references a symbol outside the set
+it is known to use — which is what would silently narrow the range of Node
+versions a prebuilt binary can serve. Verifying that the same binary loads on
+Node 20, 22, and 24 is a release-pipeline step; the local test can only check
+the Node it runs on.
 
 
 ## Portable packages

@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Digest</title>
+    <style>
+      :root { color-scheme: light dark; }
+      * { box-sizing: border-box; }
+      body { font-family: system-ui, sans-serif; margin: 0; padding: 24px;
+        display: flex; flex-direction: column; gap: 14px; height: 100vh; }
+      h1 { font-size: 1.1rem; margin: 0; }
+      textarea { flex: 1; font: inherit; padding: 10px; border-radius: 6px; resize: none;
+        border: 1px solid rgba(128,128,128,0.4); background: transparent; color: inherit; }
+      .row { display: flex; gap: 10px; align-items: center; }
+      select, button { font: inherit; padding: 7px 12px; border-radius: 6px; }
+      .out { display: flex; flex-direction: column; gap: 6px; }
+      label { font-size: 0.8rem; opacity: 0.7; }
+      output { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; font-size: 0.85rem;
+        overflow-wrap: anywhere; padding: 8px 10px; border-radius: 6px;
+        border: 1px solid rgba(128,128,128,0.25); min-height: 2.4em; }
+      #status { font-size: 0.85rem; min-height: 1.2em; opacity: 0.75; }
+      #status[data-state="error"] { color: #c42b1c; opacity: 1; }
+    </style>
+  </head>
+
+  <body>
+    <h1>Digest</h1>
+    <textarea id="text" placeholder="Type or paste text to hash."></textarea>
+
+    <div class="row">
+      <select id="algorithm">
+        <option value="sha256">SHA-256</option>
+        <option value="sha512">SHA-512</option>
+        <option value="sha1">SHA-1</option>
+        <option value="md5">MD5</option>
+      </select>
+      <span id="size"></span>
+    </div>
+
+    <div class="out">
+      <label for="hex">Digest</label>
+      <output id="hex"></output>
+    </div>
+    <div class="out">
+      <label for="base64">Base64 of the input</label>
+      <output id="base64"></output>
+    </div>
+
+    <div id="status"></div>
+
+    <script>
+      const text = document.querySelector("#text");
+      const algorithm = document.querySelector("#algorithm");
+      const hex = document.querySelector("#hex");
+      const base64 = document.querySelector("#base64");
+      const size = document.querySelector("#size");
+      const status = document.querySelector("#status");
+
+      let pending = false;
+
+      async function compute() {
+        if (pending) return;
+        pending = true;
+        try {
+          const result = await NodeViewJS.invoke("digest:compute", {
+            text: text.value,
+            algorithm: algorithm.value
+          });
+          hex.textContent = result.hex;
+          base64.textContent = result.base64;
+          size.textContent = `${result.bytes} bytes`;
+          status.textContent = "";
+          delete status.dataset.state;
+        } catch (error) {
+          status.textContent = error.message;
+          status.dataset.state = "error";
+        } finally {
+          pending = false;
+        }
+      }
+
+      text.addEventListener("input", compute);
+      algorithm.addEventListener("change", compute);
+      window.addEventListener("load", compute);
+    </script>
+  </body>
+</html>

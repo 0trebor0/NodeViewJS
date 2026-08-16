@@ -13,10 +13,29 @@ happens when a callback fails. The runtime is tested against it.
    requested, opens every configured window natively, starts plugins, and enters
    the native message loop. It returns `true` for the primary instance and
    `false` for a secondary launch that forwarded its arguments.
-4. `app.quit()` stops plugins, disposes them, closes every window, closes all
-   native windows, releases the single-instance lock, and disposes the error
-   logger. A plugin failure is reported and rethrown after the rest of shutdown
-   completes, so one bad plugin cannot strand native resources.
+4. `app.quit()` shuts down in a fixed order, each phase completing before the
+   next begins:
+
+   | Phase | What happens |
+   | --- | --- |
+   | 1. Stop new work | `isQuitting` becomes true. `createWindow()` throws, and messages arriving from any page are ignored. |
+   | 2. Notify the application | `before-quit` handlers run, with `{ windows }`. |
+   | 3. Notify plugins | `stop`, then the `setup` cleanup, in reverse registration order. |
+   | 4. Close windows | Every window is closed and disposed. |
+   | 5. Release IPC state | Pending-request bookkeeping is dropped for every window. |
+   | 6. Release resources | Native windows, the single-instance lock, and the error logger. |
+
+   Shutdown is synchronous, so a `before-quit` handler must do its work
+   synchronously; a promise it returns is reported but not awaited. Flush state
+   there, or in a plugin `stop` hook.
+
+   A failure in any phase is reported and shutdown continues — leaving native
+   resources behind would be worse — and the first error is rethrown at the end.
+   Calling `quit()` again is a no-op: handlers do not run twice.
+
+   A command still running when shutdown begins is not cancelled, because it may
+   be midway through a write. It finishes, but its answer is dropped: the window
+   that asked is gone. Design long-running commands to be safe to abandon.
 
 `app.run()` may be called only once. If startup throws, the app reports the
 error, releases the single-instance lock, stops plugins, and closes the windows
@@ -87,6 +106,10 @@ Application and window event handler failures are **logged and isolated**:
 This applies to `app.on()`, `window.on()`, `menu`, `tray-menu`,
 `second-instance`, `open-url`, and `open-file` handlers alike — they share one
 dispatch path.
+
+Frontend listeners are isolated the same way. A `NodeViewJS.on()` listener that
+throws, or returns a promise that rejects, is reported to the page console and
+the remaining listeners for that event still run.
 
 Command handlers are different, because `invoke()` has a caller waiting. A
 command that throws or rejects is reported to the backend log and the failure is

@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Quick add</title>
+    <style>
+      :root { color-scheme: light dark; }
+      * { box-sizing: border-box; }
+      body { font-family: system-ui, sans-serif; margin: 0; padding: 20px;
+        display: flex; flex-direction: column; gap: 12px; height: 100vh; }
+      p { margin: 0; font-size: 0.85rem; opacity: 0.7; }
+      form { display: flex; gap: 8px; }
+      input { flex: 1; font: inherit; padding: 8px 10px; border-radius: 6px;
+        border: 1px solid rgba(128,128,128,0.4); background: transparent; color: inherit; }
+      button { font: inherit; padding: 8px 14px; border-radius: 6px; cursor: pointer; }
+      #status { font-size: 0.85rem; min-height: 1.2em; opacity: 0.75; }
+      #status[data-state="error"] { color: #c42b1c; opacity: 1; }
+    </style>
+  </head>
+
+  <body>
+    <p>This window may add a task. It cannot read the list: its permission
+       policy narrows the application's to <code>fs:write</code> only.</p>
+
+    <form id="add">
+      <input id="title" type="text" placeholder="New task" autocomplete="off" maxlength="200" autofocus>
+      <button type="submit">Add</button>
+    </form>
+
+    <div id="status"></div>
+
+    <script>
+      const form = document.querySelector("#add");
+      const title = document.querySelector("#title");
+      const status = document.querySelector("#status");
+
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const value = title.value.trim();
+        if (value === "") return;
+        try {
+          await NodeViewJS.invoke("tasks:add", { title: value });
+          title.value = "";
+          status.textContent = "Added.";
+          delete status.dataset.state;
+          // Ask the backend to dismiss this window.
+          NodeViewJS.emit("quick-add:done", {});
+        } catch (error) {
+          status.textContent = error.message;
+          status.dataset.state = "error";
+        }
+      });
+    </script>
+  </body>
+</html>

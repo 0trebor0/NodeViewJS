@@ -154,6 +154,7 @@ The page is untrusted; the Node.js backend is trusted. The WebView gets no `requ
 - [Testing](wiki/Testing.md) — unit, native, bridge, packaging, and security suites
 - [Troubleshooting](wiki/Troubleshooting.md)
 - [The starter app](examples/basic) — the canonical sample, and exactly what `nodeviewjs create` generates
+- [The Tasks app](examples/tasks) — a small real application used to dogfood the API: two windows, narrowed per-window permissions, persistence, menu, tray, and updates
 - [Single-page guide](docs/index.html) — the same material in one HTML file
 - [PLAN.md](PLAN.md) — roadmap and improvement plan
 

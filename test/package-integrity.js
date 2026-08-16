@@ -6,6 +6,7 @@ const os = require("node:os");
 const path = require("node:path");
 const { spawnSync } = require("node:child_process");
 const {
+  MANIFEST_HEADER,
   MANIFEST_NAME,
   generateIntegrityManifest,
   parseIntegrityManifest
@@ -136,6 +137,42 @@ try {
       path.join(candidate, `${appName}.exe`)
     );
   });
+  // A modification that keeps the file size identical: only the digest can
+  // catch this one, so it proves the size is not the whole check.
+  expectTamperFailure("same-size", (candidate, candidateResources) => {
+    const target = path.join(candidateResources, "app", "index.html");
+    const original = fs.readFileSync(target);
+    const modified = Buffer.from(original);
+    // Flip one byte, keeping the length exactly the same.
+    modified[modified.length - 1] = modified[modified.length - 1] ^ 0x01;
+    assert.equal(modified.length, original.length);
+    fs.writeFileSync(target, modified);
+  });
+
+  // A listed file replaced by a directory of the same name.
+  expectTamperFailure("file-as-directory", (candidate, candidateResources) => {
+    const target = path.join(candidateResources, "app", "index.html");
+    fs.rmSync(target);
+    fs.mkdirSync(target);
+    fs.writeFileSync(path.join(target, "index.html"), "tampered");
+  });
+
+  // A listed file replaced by a symbolic link to content outside the package.
+  expectTamperFailure("file-symlink", (candidate, candidateResources) => {
+    const target = path.join(candidateResources, "app", "app.js");
+    const outside = path.join(temporaryRoot, `outside-app-${Date.now()}.js`);
+    fs.writeFileSync(outside, fs.readFileSync(target));
+    fs.rmSync(target);
+    try {
+      fs.symlinkSync(outside, target, "file");
+    } catch {
+      // Creating a file symlink needs Developer Mode or elevation on Windows.
+      // Fall back to a junction-backed directory, which the launcher must also
+      // refuse, so the case still asserts something.
+      fs.mkdirSync(target);
+    }
+  });
+
   expectTamperFailure("reparse", (candidate, candidateResources) => {
     const bridgeDirectory = path.join(candidateResources, "app", "__nodeview");
     const outside = path.join(temporaryRoot, "outside-bridge");
@@ -144,6 +181,52 @@ try {
     fs.writeFileSync(path.join(outside, "bridge.js"), "tampered");
     fs.symlinkSync(outside, bridgeDirectory, "junction");
   });
+
+  // Manifest-level edge cases. These never reach the launcher, because the
+  // parser refuses them first.
+  const entry = (relative, size = 1, digest = "0".repeat(64)) =>
+    `${digest} ${size} ${Buffer.from(relative, "utf8").toString("hex")}`;
+  const manifestOf = (...entries) => [MANIFEST_HEADER, ...entries, ""].join("\n");
+
+  // The same path twice.
+  assert.throws(
+    () => parseIntegrityManifest(manifestOf(entry("app/app.js"), entry("app/app.js"))),
+    /duplicate paths/
+  );
+  // Paths differing only by case: Windows would resolve both to one file, so
+  // the manifest would no longer describe the package unambiguously.
+  assert.throws(
+    () => parseIntegrityManifest(manifestOf(entry("app/App.js"), entry("app/app.js"))),
+    /duplicate paths/
+  );
+  // Traversal, absolute paths, and Windows separators.
+  for (const unsafe of [
+    "../evil.js",
+    "app/../../evil.js",
+    "/etc/passwd",
+    "C:/Windows/System32/evil.dll",
+    "app\\evil.js",
+    "./app.js",
+    "app//app.js",
+    ""
+  ]) {
+    assert.throws(
+      () => parseIntegrityManifest(manifestOf(entry(unsafe))),
+      /unsafe|invalid/,
+      `manifest path was accepted: ${unsafe}`
+    );
+  }
+  // A path that is not valid UTF-8 round trip, and a malformed entry.
+  assert.throws(
+    () => parseIntegrityManifest([MANIFEST_HEADER, `${"0".repeat(64)} 1 6g`, ""].join("\n")),
+    /invalid/
+  );
+  assert.throws(() => parseIntegrityManifest(manifestOf(entry("app.js", "-1"))), /invalid/);
+  assert.throws(() => parseIntegrityManifest(manifestOf(entry("app.js", "01"))), /invalid/);
+  // A well-formed manifest still parses, including a zero-length file.
+  const parsed = parseIntegrityManifest(manifestOf(entry("app/app.js", 0), entry("app/b.js", 12)));
+  assert.deepEqual(parsed.map(({ path: relative }) => relative), ["app/app.js", "app/b.js"]);
+  assert.equal(parsed[0].size, 0);
 
   console.log("Package integrity test passed.");
 } finally {

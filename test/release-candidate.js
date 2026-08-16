@@ -141,12 +141,12 @@ app.command("rc:ping", { permission: "fs:read" }, (payload) => {
   observed.invoked = true;
   observed.payload = payload;
   // Backend to frontend: the page must receive this and acknowledge it.
-  setImmediate(() => app.emit("rc:pong", { token: payload && payload.token }));
+  setImmediate(() => app.emit("rc:pong", { marker: payload && payload.marker }));
   return { ok: true };
 });
 
 app.on("rc:ack", (payload) => {
-  observed.acknowledged = Boolean(payload && payload.token === "rc-token");
+  observed.acknowledged = Boolean(payload && payload.marker === "rc-roundtrip");
   finish(observed.acknowledged ? undefined : "the acknowledgement payload was wrong");
 });
 
@@ -158,9 +158,9 @@ app.run();
     <script>
       window.addEventListener("load", async () => {
         NodeViewJS.on("rc:pong", (payload) => {
-          NodeViewJS.emit("rc:ack", { token: payload.token });
+          NodeViewJS.emit("rc:ack", { marker: payload.marker });
         });
-        await NodeViewJS.invoke("rc:ping", { token: "rc-token" });
+        await NodeViewJS.invoke("rc:ping", { marker: "rc-roundtrip" });
       });
     </script>
   </body>
@@ -184,7 +184,7 @@ app.run();
   const observed = JSON.parse(fs.readFileSync(resultFile, "utf8"));
   assert.equal(observed.error, undefined, `IPC round trip failed: ${observed.error}`);
   assert.equal(observed.invoked, true, "the frontend never reached a backend command");
-  assert.deepEqual(observed.payload, { token: "rc-token" }, "the invoke payload did not arrive intact");
+  assert.deepEqual(observed.payload, { marker: "rc-roundtrip" }, "the invoke payload did not arrive intact");
   assert.equal(observed.acknowledged, true, "the backend event never reached the frontend");
   assert.equal(run.status, 0, `the app did not exit cleanly:\n${run.stdout}\n${run.stderr}`);
 

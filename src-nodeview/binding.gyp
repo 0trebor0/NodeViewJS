@@ -13,7 +13,7 @@
         "src/addon.cpp",
         "src/bridge.cpp"
       ],
-      "defines": ["NAPI_CPP_EXCEPTIONS"],
+      "defines": ["NAPI_VERSION=8", "NAPI_CPP_EXCEPTIONS"],
       "cflags!": ["-fno-exceptions"],
       "cflags_cc!": ["-fno-exceptions"],
       "conditions": [

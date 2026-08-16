@@ -13,6 +13,7 @@ NodeViewJS is a lightweight desktop runtime that combines a Node.js backend with
 - [[Testing]] — unit, native, bridge, packaging, and security suites.
 - [[Troubleshooting]] — common build, WebView2, packaging, and bridge problems.
 - [[Known Limitations]] — current platform boundaries and unsupported behavior.
+- [[API Findings]] — what building three real applications against the API surfaced.
 
 ## Current status
 

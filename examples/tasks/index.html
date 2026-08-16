@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Tasks</title>
+    <style>
+      :root { color-scheme: light dark; }
+      * { box-sizing: border-box; }
+      body {
+        font-family: system-ui, sans-serif;
+        margin: 0;
+        padding: 24px;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        height: 100vh;
+      }
+      header { display: flex; align-items: baseline; justify-content: space-between; }
+      h1 { font-size: 1.15rem; margin: 0; }
+      #summary { font-size: 0.85rem; opacity: 0.7; }
+      form { display: flex; gap: 8px; }
+      input[type="text"] { flex: 1; font: inherit; padding: 8px 10px; border-radius: 6px;
+        border: 1px solid rgba(128,128,128,0.4); background: transparent; color: inherit; }
+      button { font: inherit; padding: 8px 14px; border-radius: 6px; cursor: pointer; }
+      ul { list-style: none; margin: 0; padding: 0; flex: 1; overflow-y: auto;
+        display: flex; flex-direction: column; gap: 6px; }
+      li { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 6px;
+        border: 1px solid rgba(128,128,128,0.25); }
+      li.done .title { text-decoration: line-through; opacity: 0.55; }
+      .title { flex: 1; overflow-wrap: anywhere; }
+      .remove { border: 0; background: transparent; color: inherit; opacity: 0.6; }
+      .remove:hover { opacity: 1; color: #c42b1c; }
+      #status { font-size: 0.85rem; min-height: 1.2em; opacity: 0.75; }
+      #status[data-state="error"] { color: #c42b1c; opacity: 1; }
+      #empty { opacity: 0.6; font-size: 0.9rem; }
+    </style>
+  </head>
+
+  <body>
+    <header>
+      <h1>Tasks</h1>
+      <span id="summary"></span>
+    </header>
+
+    <form id="add">
+      <input id="title" type="text" placeholder="What needs doing?" autocomplete="off" maxlength="200">
+      <button type="submit">Add</button>
+    </form>
+
+    <ul id="list"></ul>
+    <p id="empty" hidden>Nothing yet. Add a task above, or press Ctrl+N for the quick-add window.</p>
+    <div id="status"></div>
+
+    <script>
+      const list = document.querySelector("#list");
+      const empty = document.querySelector("#empty");
+      const status = document.querySelector("#status");
+      const summary = document.querySelector("#summary");
+      const form = document.querySelector("#add");
+      const title = document.querySelector("#title");
+
+      let hideDone = false;
+      let tasks = [];
+
+      function setStatus(message, state) {
+        status.textContent = message;
+        if (state) status.dataset.state = state;
+        else delete status.dataset.state;
+      }
+
+      // Every command call can fail: unknown, unauthorized, invalid, or timed
+      // out. The page shows the reason rather than failing silently.
+      async function call(command, payload) {
+        try {
+          return await NodeViewJS.invoke(command, payload);
+        } catch (error) {
+          setStatus(error.message, "error");
+          return undefined;
+        }
+      }
+
+      function render() {
+        const visible = hideDone ? tasks.filter((task) => !task.done) : tasks;
+        list.replaceChildren(...visible.map((task) => {
+          const item = document.createElement("li");
+          if (task.done) item.classList.add("done");
+
+          const checkbox = document.createElement("input");
+          checkbox.type = "checkbox";
+          checkbox.checked = task.done;
+          checkbox.addEventListener("change", () => call("tasks:toggle", { id: task.id }));
+
+          const label = document.createElement("span");
+          label.className = "title";
+          // textContent, never innerHTML: task titles are user data.
+          label.textContent = task.title;
+
+          const remove = document.createElement("button");
+          remove.className = "remove";
+          remove.type = "button";
+          remove.textContent = "✕";
+          remove.title = "Remove";
+          remove.addEventListener("click", () => call("tasks:remove", { id: task.id }));
+
+          item.append(checkbox, label, remove);
+          return item;
+        }));
+
+        empty.hidden = tasks.length > 0;
+        const done = tasks.filter((task) => task.done).length;
+        summary.textContent = tasks.length === 0
+          ? ""
+          : `${done} of ${tasks.length} done`;
+      }
+
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const value = title.value.trim();
+        if (value === "") return;
+        const result = await call("tasks:add", { title: value });
+        if (result) {
+          title.value = "";
+          setStatus("Added.");
+        }
+      });
+
+      // The backend broadcasts after every change, including changes made in
+      // the quick-add window, so this list stays current without polling.
+      NodeViewJS.on("tasks:changed", (payload) => {
+        tasks = payload.tasks;
+        render();
+      });
+
+      NodeViewJS.on("view:hide-done", (payload) => {
+        hideDone = payload.hidden;
+        render();
+      });
+
+      window.addEventListener("load", async () => {
+        const result = await call("tasks:list");
+        if (result) {
+          tasks = result.tasks;
+          render();
+          setStatus("");
+        }
+      });
+    </script>
+  </body>
+</html>

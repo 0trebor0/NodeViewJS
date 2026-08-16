@@ -69,6 +69,26 @@ npm run test:rc
 On failure the temporary workspace is kept and its path printed, so the
 half-built application can be inspected.
 
+## Load and failure injection
+
+```powershell
+npm run test:limits
+npm run test:updater-failures
+```
+
+`test:limits` is about valid-but-hostile traffic rather than malformed input:
+thousands of commands and events, repeated maximum-size messages, a full
+concurrency window of handlers that never finish, a page that never signals
+readiness, and rapid window churn under traffic. Every case asserts that the
+runtime's bookkeeping stays bounded — the replay memo at its cap, no requests
+left active, no windows retained. `npm test` runs it with `--expose-gc`, which
+adds heap-growth assertions.
+
+`test:updater-failures` injects a failure at every stage of an update and
+asserts the guarantee that matters: an update that does not succeed leaves the
+working installation exactly as it was, and the application is never shut down
+for an installer that failed verification or a helper that never started.
+
 ## Trust boundary fuzzing
 
 ```powershell

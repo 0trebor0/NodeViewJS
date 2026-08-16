@@ -241,8 +241,35 @@
     }
   }
 
+  // Reporting must not throw: dispatch runs from the transport callback, and a
+  // page can replace or remove console entirely.
+  function reportListenerFailure(eventName, error) {
+    try {
+      console.error(`[NodeViewJS] A listener for '${eventName}' failed:`, error);
+    } catch {}
+  }
+
+  // Listeners are isolated from one another: one that throws, or returns a
+  // promise that rejects, is reported and the remaining listeners still run.
+  // Without this a single bad listener silently swallows the event for every
+  // other listener registered after it.
   function dispatch(eventName, payload) {
-    for (const handler of [...listeners.get(eventName) || []]) handler(payload);
+    for (const handler of [...listeners.get(eventName) || []]) {
+      let result;
+      try {
+        result = handler(payload);
+      } catch (error) {
+        reportListenerFailure(eventName, error);
+        continue;
+      }
+      if (result && typeof result.then === "function") {
+        try {
+          result.then(undefined, (error) => reportListenerFailure(eventName, error));
+        } catch (error) {
+          reportListenerFailure(eventName, error);
+        }
+      }
+    }
   }
 
   // Shared by off() and the unsubscribe function on() returns, so a removed

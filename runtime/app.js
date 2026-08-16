@@ -743,6 +743,7 @@ class App {
   #permissions;
   #plugins = new Map();
   #pluginsDisposed = false;
+  #quitting = false;
   #startupStartedAt = performance.now();
   #mainWindow;
   #launchConfiguration;
@@ -794,6 +795,9 @@ class App {
   }
 
   createWindow(options = {}) {
+    if (this.#quitting) {
+      throw new Error("The application is shutting down and cannot open new windows.");
+    }
     const resolvedOptions = resolveWindowOptions(options, {
       ...this.options,
       permissionPolicy: this.#permissions
@@ -802,7 +806,19 @@ class App {
     const window = new AppWindow(this, publicOptions);
     this.#windowPermissionPolicies.set(window, permissionPolicy);
     this.#windows.add(window);
-    if (this.#hasRun) window._open(true);
+    if (this.#hasRun) {
+      try {
+        window._open(true);
+      } catch (error) {
+        // The window never opened, so it must not be left in the collection
+        // reporting itself as one of the app's windows. _open() already closes
+        // itself when it fails after the native window exists; this covers a
+        // failure before that, where there is nothing to close.
+        this.#windows.delete(window);
+        window._dispose();
+        throw error;
+      }
+    }
     return window;
   }
 
@@ -1091,16 +1107,69 @@ class App {
     return true;
   }
 
+  // Shutdown runs in a fixed order, and each phase completes before the next
+  // begins:
+  //
+  //   1. stop new work          - no new windows, commands, or frontend messages
+  //   2. notify the application - 'before-quit' handlers
+  //   3. notify plugins         - stop, then dispose, in reverse registration order
+  //   4. close windows
+  //   5. release IPC state      - pending request bookkeeping for every window
+  //   6. release native and process resources
+  //
+  // It is synchronous, so 'before-quit' handlers must do their work
+  // synchronously; a promise returned from one is consumed and reported but not
+  // awaited. Calling quit() again is a no-op.
   quit() {
-    let pluginError;
-    try { this.#stopPlugins(); } catch (error) { pluginError = error; }
-    try { this.#disposePlugins(); } catch (error) { pluginError ??= error; }
-    for (const window of [...this.#windows]) window.close();
-    native().closeAllWindows();
+    if (this.#quitting) return;
+    this.#quitting = true;
+
+    let firstError;
+    const windows = [...this.#windows];
+
+    // 2. Notify the application. A failing handler is isolated: shutdown
+    //    continues, because leaving native resources behind is worse.
+    for (const handler of [...this.#eventHandlers.get("before-quit") ?? []]) {
+      try {
+        const result = handler({ windows: windows.length });
+        if (result && typeof result.then === "function") {
+          result.catch((error) => this._reportHandlerFailure("App event 'before-quit' failed", error));
+        }
+      } catch (error) {
+        this._reportHandlerFailure("App event 'before-quit' failed", error);
+      }
+    }
+
+    // 3. Notify plugins.
+    try { this.#stopPlugins(); } catch (error) { firstError = error; }
+    try { this.#disposePlugins(); } catch (error) { firstError ??= error; }
+
+    // 4. Close windows.
+    for (const window of windows) {
+      try {
+        window.close();
+      } catch (error) {
+        this._reportHandlerFailure("Window could not be closed during shutdown", error);
+        firstError ??= error;
+      }
+    }
+
+    // 5. Release IPC state. Handlers already running cannot be cancelled, but
+    //    their bookkeeping goes now and their answers are dropped, because the
+    //    window they belong to is gone.
+    for (const window of windows) this.#ipcRequestStates.delete(window);
+
+    // 6. Release native and process resources.
+    try { native().closeAllWindows(); } catch (error) { firstError ??= error; }
     this.#singleInstance?.close();
     this.#singleInstance = undefined;
     this.#errorLogger.dispose();
-    if (pluginError) throw pluginError;
+
+    if (firstError) throw firstError;
+  }
+
+  get isQuitting() {
+    return this.#quitting;
   }
 
   show() {
@@ -1224,6 +1293,8 @@ class App {
   }
 
   async _handleWindowMessage(window, serializedMessage) {
+    // Phase 1 of shutdown: no new work is accepted from any page.
+    if (this.#quitting) return;
     const message = ipc.parseMessage(serializedMessage);
     if (!message) {
       // Rejecting the message stays silent towards the page: garbage gets no
@@ -1287,6 +1358,14 @@ class App {
   // event name instead of leaving an empty handler set behind.
   _eventNames() {
     return [...this.#eventHandlers.keys()];
+  }
+
+  // Internal: lets the resource-limit tests prove that per-window IPC
+  // bookkeeping stays bounded no matter how much traffic a page generates.
+  _ipcRequestStats(window) {
+    const state = this.#ipcRequestStates.get(window);
+    if (!state) return { active: 0, completed: 0 };
+    return { active: state.active.size, completed: state.completed.size };
   }
 
   // Diagnostics answer three questions: what failed, why, and what to do next.
@@ -1377,6 +1456,21 @@ class App {
     await this.#dispatchAppEvent(eventName, payload);
   }
 
+  // A command can outlive the window that asked for it: the page may close, or
+  // the app may quit, while the handler is still running. There is nowhere to
+  // deliver the answer then, so it is dropped rather than thrown from a native
+  // callback.
+  #respond(window, serializedMessage) {
+    // Only a window that has actually been closed is skipped. One that has not
+    // been opened yet still buffers, exactly as emit() does.
+    if (window.isClosed === true) return;
+    try {
+      window._post(serializedMessage);
+    } catch (error) {
+      this._reportHandlerFailure("IPC response could not be delivered", error);
+    }
+  }
+
   async #invoke(window, message) {
     let state = this.#ipcRequestStates.get(window);
     if (!state) {
@@ -1385,7 +1479,7 @@ class App {
     }
 
     if (state.active.has(message.id) || state.completed.has(message.id)) {
-      window._post(ipc.serialize(ipc.createResponseMessage(
+      this.#respond(window, ipc.serialize(ipc.createResponseMessage(
         message.id,
         false,
         `Duplicate or replayed IPC request id: ${message.id}`
@@ -1393,7 +1487,7 @@ class App {
       return;
     }
     if (state.active.size >= ipc.IPC_MAX_CONCURRENT_REQUESTS) {
-      window._post(ipc.serialize(ipc.createResponseMessage(
+      this.#respond(window, ipc.serialize(ipc.createResponseMessage(
         message.id,
         false,
         "Too many concurrent IPC requests."
@@ -1446,10 +1540,10 @@ class App {
       } finally {
         clearTimeout(timeout);
       }
-      window._post(ipc.serialize(ipc.createResponseMessage(message.id, true, result)));
+      this.#respond(window, ipc.serialize(ipc.createResponseMessage(message.id, true, result)));
     } catch (error) {
       const detail = createErrorDetail(error);
-      window._post(ipc.serialize(ipc.createResponseMessage(
+      this.#respond(window, ipc.serialize(ipc.createResponseMessage(
         message.id,
         false,
         detail

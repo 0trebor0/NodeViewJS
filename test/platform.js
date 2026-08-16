@@ -282,9 +282,17 @@ const window = {
 };
 window.top = window;
 const bridgeSource = fs.readFileSync(path.join(root, "runtime", "bridge.js"), "utf8");
+const bridgeConsoleErrors = [];
+let bridgeListenerRejection = Promise.resolve();
 vm.runInNewContext(
   bridgeSource,
-  { document: { readyState: "loading" }, window, setTimeout, clearTimeout }
+  {
+    document: { readyState: "loading" },
+    window,
+    setTimeout,
+    clearTimeout,
+    console: { error: (...args) => bridgeConsoleErrors.push(args) }
+  }
 );
 assert.deepEqual(JSON.parse(JSON.stringify(posted)), [{
   version: 1,
@@ -532,17 +540,55 @@ window.__nodeviewReceive({
   payload: { host: "webkit" }
 });
 assert.deepEqual(JSON.parse(JSON.stringify(eventPayload)), { host: "webkit" });
-window.NodeViewJS.on("throwing-listener", () => {
-  throw new Error("listener failure should escape receive");
+// Frontend listeners are isolated from one another: one that fails must not
+// swallow the event for the listeners registered after it.
+const listenerOrder = [];
+let rejectingListenerSettled;
+window.NodeViewJS.on("isolated-listeners", () => {
+  listenerOrder.push("first");
 });
-assert.throws(
-  () => window.__nodeviewReceive({
-    version: 1,
-    type: "event",
-    event: "throwing-listener"
-  }),
-  /listener failure/
+window.NodeViewJS.on("isolated-listeners", () => {
+  listenerOrder.push("throwing");
+  throw new Error("synchronous listener failure");
+});
+window.NodeViewJS.on("isolated-listeners", () => {
+  listenerOrder.push("rejecting");
+  // An async listener whose promise rejects is reported rather than becoming
+  // an unhandled rejection in the page.
+  rejectingListenerSettled = Promise.reject(new Error("async listener failure"));
+  return rejectingListenerSettled;
+});
+window.NodeViewJS.on("isolated-listeners", () => {
+  listenerOrder.push("last");
+});
+
+bridgeConsoleErrors.length = 0;
+assert.doesNotThrow(() => window.__nodeviewReceive({
+  version: 1,
+  type: "event",
+  event: "isolated-listeners"
+}));
+assert.deepEqual(listenerOrder, ["first", "throwing", "rejecting", "last"]);
+
+const synchronousReport = bridgeConsoleErrors.find(
+  ([, error]) => error && error.message === "synchronous listener failure"
 );
+assert.ok(synchronousReport, "a throwing listener must be reported");
+assert.match(synchronousReport[0], /listener for 'isolated-listeners' failed/);
+
+// The rejection is reported on a later microtask, and must not be left
+// unhandled in the meantime.
+bridgeListenerRejection = rejectingListenerSettled.then(
+  () => undefined,
+  () => undefined
+).then(() => {
+  assert.ok(
+    bridgeConsoleErrors.some(
+      ([, error]) => error && error.message === "async listener failure"
+    ),
+    "a rejecting listener must be reported"
+  );
+});
 
 const queuedInvocations = Array.from({ length: 64 }, (_, index) => (
   window.NodeViewJS.invoke(`queued-${index}`)
@@ -586,6 +632,8 @@ Promise.all([
   assert.match(throwingLengthResult, /size or complexity limit/);
   assert.match(changingPayloadResult, /size or complexity limit/);
   assert.match(results.at(-1), /Too many pending/);
+  return bridgeListenerRejection;
+}).then(() => {
   console.log("Platform boundary test passed.");
 }).catch((error) => {
   console.error(error);

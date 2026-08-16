@@ -141,6 +141,11 @@ export interface MenuEventPayload {
   window: AppWindow;
 }
 
+export interface BeforeQuitPayload {
+  /** How many windows the app still owned when shutdown began. */
+  windows: number;
+}
+
 export interface SecondInstancePayload {
   args: string[];
   cwd: string;
@@ -246,12 +251,20 @@ export class App {
   readonly windows: AppWindow[];
   readonly plugins: PluginMetadata[];
   readonly logPath: string;
+  /** True once quit() has begun. New work is refused from that point. */
+  readonly isQuitting: boolean;
 
   createWindow(options?: WindowOptions): AppWindow;
   use(plugin: Plugin, options?: Record<string, unknown>): this;
   command(name: string, handler: CommandHandler): this;
   command(name: string, options: CommandOptions, handler: CommandHandler): this;
 
+  /**
+   * Fired at the start of quit(), before plugins are stopped and windows are
+   * closed. Shutdown is synchronous, so a handler must do its work
+   * synchronously; a returned promise is reported but not awaited.
+   */
+  on(eventName: "before-quit", handler: (payload: BeforeQuitPayload) => unknown): Unsubscribe;
   on(eventName: "menu", handler: (payload: MenuEventPayload) => unknown): Unsubscribe;
   on(eventName: "tray-menu", handler: (payload: MenuEventPayload) => unknown): Unsubscribe;
   on(eventName: "second-instance", handler: (payload: SecondInstancePayload) => unknown): Unsubscribe;
@@ -265,6 +278,7 @@ export class App {
 
   /** Returns false when another instance owns the single-instance lock. */
   run(): boolean;
+  /** Shuts down in a fixed order. Calling it again is a no-op. */
   quit(): void;
   show(): this;
   hide(): this;

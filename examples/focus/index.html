@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Focus</title>
+    <style>
+      :root { color-scheme: light dark; }
+      * { box-sizing: border-box; }
+      body { font-family: system-ui, sans-serif; margin: 0; padding: 24px; height: 100vh;
+        display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; }
+      #remaining { font-size: 3.2rem; font-variant-numeric: tabular-nums; font-weight: 600; }
+      .row { display: flex; gap: 10px; align-items: center; }
+      input, button { font: inherit; padding: 8px 14px; border-radius: 6px; }
+      input { width: 5.5rem; text-align: center; border: 1px solid rgba(128,128,128,0.4);
+        background: transparent; color: inherit; }
+      button { cursor: pointer; }
+      #status { font-size: 0.85rem; opacity: 0.75; min-height: 1.2em; text-align: center; }
+      #status[data-state="error"] { color: #c42b1c; opacity: 1; }
+      .hint { font-size: 0.8rem; opacity: 0.6; text-align: center; }
+    </style>
+  </head>
+
+  <body>
+    <div id="remaining">25:00</div>
+
+    <div class="row">
+      <input id="minutes" type="number" min="1" max="180" value="25">
+      <button id="start" type="button">Start</button>
+      <button id="stop" type="button">Stop</button>
+    </div>
+
+    <div id="status"></div>
+    <p class="hint">Closing this window keeps the timer running in the tray.</p>
+
+    <script>
+      const remaining = document.querySelector("#remaining");
+      const minutes = document.querySelector("#minutes");
+      const status = document.querySelector("#status");
+
+      function format(seconds) {
+        const whole = Math.max(0, Math.round(seconds));
+        const mm = String(Math.floor(whole / 60)).padStart(2, "0");
+        const ss = String(whole % 60).padStart(2, "0");
+        return `${mm}:${ss}`;
+      }
+
+      function show(state) {
+        remaining.textContent = state.running
+          ? format(state.remaining)
+          : format(state.minutes * 60);
+        status.textContent = state.running ? "Running" : "Ready";
+        delete status.dataset.state;
+      }
+
+      async function call(command, payload) {
+        try {
+          return await NodeViewJS.invoke(command, payload);
+        } catch (error) {
+          status.textContent = error.message;
+          status.dataset.state = "error";
+          return undefined;
+        }
+      }
+
+      document.querySelector("#start").addEventListener("click", async () => {
+        const state = await call("focus.timer:start", { minutes: Number(minutes.value) });
+        if (state) show(state);
+      });
+
+      document.querySelector("#stop").addEventListener("click", async () => {
+        const state = await call("focus.timer:stop");
+        if (state) show(state);
+      });
+
+      // The plugin broadcasts to every window, so this display stays correct
+      // even when the session was started from the tray or a focus:// link.
+      NodeViewJS.on("focus.timer:tick", show);
+      NodeViewJS.on("focus.timer:started", show);
+      NodeViewJS.on("focus.timer:stopped", show);
+      NodeViewJS.on("focus.timer:finished", () => {
+        status.textContent = "Session complete.";
+        delete status.dataset.state;
+      });
+
+      window.addEventListener("load", async () => {
+        const state = await call("focus.timer:state");
+        if (state) show(state);
+      });
+    </script>
+  </body>
+</html>
