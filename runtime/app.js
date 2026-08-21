@@ -15,8 +15,10 @@ const { createErrorLogger } = require("./error-logger");
 const ipc = require("./ipc");
 const { findLaunchTargets, resolveLaunchConfiguration } = require("./launch-routing");
 const {
+  findAcceleratorConflict,
   normalizeContextPosition,
   normalizeMenuTemplate,
+  normalizeShortcutTemplate,
   normalizeTrayMenuTemplate
 } = require("./menu");
 const net = require("./net");
@@ -36,11 +38,17 @@ const COMMAND_PERMISSIONS = new Set([
   "shell:open",
   "notification:show",
   "window:control",
+  "shortcut:register",
   "net:fetch"
 ]);
 const PERMISSION_GROUPS = new Set(
   [...COMMAND_PERMISSIONS].map((permission) => `${permission.split(":", 1)[0]}:*`)
 );
+const MENU_EVENT_NAMES = new Map([
+  ["application", "menu"],
+  ["tray", "tray-menu"],
+  ["shortcut", "shortcut"]
+]);
 const PERMISSION_SCOPE_PATTERN = /^[a-zA-Z0-9](?:[a-zA-Z0-9._/-]*[a-zA-Z0-9])?$/;
 const PLUGIN_NAME_PATTERN = /^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$/;
 const PLUGIN_MEMBER_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/;
@@ -536,12 +544,32 @@ class AppWindow {
 
   setMenu(template) {
     const menu = normalizeMenuTemplate(template, { allowNull: true });
+    const conflict = findAcceleratorConflict(menu, this.options.shortcuts);
+    if (conflict) {
+      throw new TypeError(`Menu accelerator ${conflict} is already registered as a shortcut.`);
+    }
     this.options.menu = menu;
     if (this.#id !== undefined) {
       if (typeof native().setApplicationMenu !== "function") {
         throw new Error("Native application menus are currently available only on Windows.");
       }
       native().setApplicationMenu(this.#id, menu);
+    }
+    return this;
+  }
+
+  setShortcuts(list) {
+    const shortcuts = normalizeShortcutTemplate(list, { allowNull: true });
+    const conflict = findAcceleratorConflict(this.options.menu, shortcuts);
+    if (conflict) {
+      throw new TypeError(`Shortcut accelerator ${conflict} is already used by a menu item.`);
+    }
+    this.options.shortcuts = shortcuts;
+    if (this.#id !== undefined) {
+      if (typeof native().setWindowShortcuts !== "function") {
+        throw new Error("Keyboard shortcuts are currently available only on Windows.");
+      }
+      native().setWindowShortcuts(this.#id, shortcuts);
     }
     return this;
   }
@@ -674,6 +702,7 @@ class AppWindow {
             this.#app._reportHandlerFailure("Menu handler failed", error);
           }));
         if (this.options.menu) native().setApplicationMenu(id, this.options.menu);
+        if (this.options.shortcuts) native().setWindowShortcuts(id, this.options.shortcuts);
       }
       native().loadFile(id, this.options.entry);
       if (process.env.NODEVIEW_DEV_WATCH === "1" &&
@@ -1192,6 +1221,11 @@ class App {
     return this;
   }
 
+  setShortcuts(list) {
+    this.#mainWindow.setShortcuts(list);
+    return this;
+  }
+
   setWindowColors(colors = {}) {
     this.#mainWindow.setWindowColors(colors);
     return this;
@@ -1451,7 +1485,7 @@ class App {
     const payload = event.checked === undefined
       ? { id: event.id, window }
       : { id: event.id, checked: Boolean(event.checked), window };
-    const eventName = event.source === "tray" ? "tray-menu" : "menu";
+    const eventName = MENU_EVENT_NAMES.get(event.source) ?? "menu";
     await window._dispatch(eventName, payload);
     await this.#dispatchAppEvent(eventName, payload);
   }

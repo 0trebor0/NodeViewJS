@@ -308,6 +308,32 @@ assert.equal(
   secondaryWindow
 );
 assert.equal(secondaryWindow.options.menu[0].id, "secondary.close");
+assert.equal(
+  secondaryWindow.setShortcuts([{ id: "secondary.search", accelerator: "Ctrl+Shift+F" }]),
+  secondaryWindow
+);
+assert.equal(secondaryWindow.options.shortcuts[0].id, "secondary.search");
+assert.equal(secondaryWindow.options.shortcuts[0].accelerator.display, "Ctrl+Shift+F");
+// Menu items and shortcuts share one accelerator table, so each rejects the
+// combination the other already owns, whichever is registered first.
+assert.throws(
+  () => secondaryWindow.setMenu([
+    { id: "secondary.search", label: "Search", accelerator: "Ctrl+Shift+F" }
+  ]),
+  /already registered as a shortcut/
+);
+assert.equal(secondaryWindow.setShortcuts(null), secondaryWindow);
+assert.equal(secondaryWindow.options.shortcuts, null);
+assert.equal(
+  secondaryWindow.setMenu([
+    { id: "secondary.search", label: "Search", accelerator: "Ctrl+Shift+F" }
+  ]),
+  secondaryWindow
+);
+assert.throws(
+  () => secondaryWindow.setShortcuts([{ id: "secondary.other", accelerator: "Ctrl+Shift+F" }]),
+  /already used by a menu item/
+);
 assert.equal(secondaryWindow.setMenu(null), secondaryWindow);
 assert.equal(secondaryWindow.options.menu, null);
 assert.deepEqual(secondaryWindow.getState(), { isOpen: false });
@@ -771,6 +797,55 @@ async function testIpcCommandErrorDetail() {
   }]);
 }
 
+async function testShortcutEventRouting() {
+  const routingApp = new App({ entry: __filename });
+  const window = routingApp.mainWindow;
+  const seen = [];
+  for (const name of ["menu", "tray-menu", "shortcut"]) {
+    routingApp.on(name, (payload) => seen.push({ scope: "app", name, id: payload.id }));
+    window.on(name, (payload) => seen.push({ scope: "window", name, id: payload.id }));
+  }
+
+  // The native layer reports which surface produced the command, and one
+  // handler routes all three to their own event.
+  await routingApp._handleMenuCommand(window, { id: "from.shortcut", source: "shortcut" });
+  await routingApp._handleMenuCommand(window, { id: "from.tray", source: "tray" });
+  await routingApp._handleMenuCommand(window, { id: "from.menu", source: "application" });
+  await routingApp._handleMenuCommand(window, { id: "from.default" });
+  await routingApp._handleMenuCommand(window, { id: "from.unknown", source: "unknown" });
+  // An inherited property name must not resolve to an event name.
+  await routingApp._handleMenuCommand(window, { id: "from.inherited", source: "constructor" });
+
+  assert.deepEqual(seen, [
+    { scope: "window", name: "shortcut", id: "from.shortcut" },
+    { scope: "app", name: "shortcut", id: "from.shortcut" },
+    { scope: "window", name: "tray-menu", id: "from.tray" },
+    { scope: "app", name: "tray-menu", id: "from.tray" },
+    { scope: "window", name: "menu", id: "from.menu" },
+    { scope: "app", name: "menu", id: "from.menu" },
+    { scope: "window", name: "menu", id: "from.default" },
+    { scope: "app", name: "menu", id: "from.default" },
+    { scope: "window", name: "menu", id: "from.unknown" },
+    { scope: "app", name: "menu", id: "from.unknown" },
+    { scope: "window", name: "menu", id: "from.inherited" },
+    { scope: "app", name: "menu", id: "from.inherited" }
+  ]);
+
+  // A shortcut has no checked state, so the payload carries only the id.
+  const payloads = [];
+  routingApp.on("shortcut", (payload) => payloads.push(payload));
+  await routingApp._handleMenuCommand(window, { id: "plain", source: "shortcut" });
+  assert.deepEqual(Object.keys(payloads[0]).sort(), ["id", "window"]);
+  assert.equal(payloads[0].window, window);
+
+  // Malformed native events are ignored rather than dispatched.
+  const before = seen.length;
+  await routingApp._handleMenuCommand(window, null);
+  await routingApp._handleMenuCommand(window, { source: "shortcut" });
+  await routingApp._handleMenuCommand(window, { id: 42, source: "shortcut" });
+  assert.equal(seen.length, before, "a malformed native event was dispatched");
+}
+
 async function testWindowPermissionPolicy() {
   const windowPolicyApp = new App({
     entry: __filename,
@@ -974,6 +1049,7 @@ Promise.all([
   testConfig(),
   testDevWatcher(),
   testIpcCommandErrorDetail(),
+  testShortcutEventRouting(),
   testWindowPermissionPolicy(),
   testBridgeLifecycleMessages()
 ])

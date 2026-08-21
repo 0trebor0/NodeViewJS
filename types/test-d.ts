@@ -35,6 +35,13 @@ app.command("readSettings", { permission: "fs:read", scope: "settings" }, async 
   return { received: payload };
 });
 
+app.setShortcuts([{ id: "search.focus", accelerator: "Ctrl+Shift+F" }]);
+const stopShortcut: () => void = app.on("shortcut", (event: MenuEventPayload) => {
+  const source: AppWindow = event.window;
+  source.emit("focus-search", { id: event.id });
+});
+stopShortcut();
+
 const stopMenu: () => void = app.on("menu", (event: MenuEventPayload) => {
   const source: AppWindow = event.window;
   source.setTitle(event.id);
@@ -93,6 +100,10 @@ function useDesktop(): void {
   clipboard.writeText(clipboard.readText());
   dialog.message({ message: "Saved." });
   const opened: string | undefined = dialog.openFile();
+  const many: string[] | undefined = dialog.openFile({ multiple: true });
+  const folder: string | undefined = dialog.openDirectory();
+  void many;
+  void folder;
   notification.show({ title: "Example", message: opened ?? "Nothing selected." });
   shell.openExternal("https://example.com");
   shell.openPath("C:/temp");

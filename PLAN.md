@@ -24,7 +24,7 @@
 
 ## Execution Status
 
-The Windows implementation queues below are complete. macOS and Linux security parity remains deferred. The active release work is tracked separately so implementation status is not confused with external publishing prerequisites.
+The Windows implementation queues below are complete. macOS and Linux security parity remains deferred. The Competitive Gap Queue is complete. The active release work is tracked separately so implementation status is not confused with external publishing prerequisites.
 
 ### Live-Test Diagnostics
 
@@ -82,6 +82,29 @@ Work proceeds from top to bottom. New APIs must retain safe defaults, remain per
 | ID | Work item | Status | Target |
 | --- | --- | --- | --- |
 | FW-01 | Hover-revealed native frame | Deferred | Revisit a `frameOnHover`-style option only after the native frame transition can be proven not to blank, resize, or repaint the WebView incorrectly. The replacement needs live visual/integration coverage before it is documented as supported. |
+
+### Competitive Gap Queue
+
+Derived from a 2026-08-21 review of NodeViewJS against other Node.js desktop runtimes that draw native widgets and run application code on the UI thread. Only gaps that fit the WebView-first architecture are queued. Native widget parity is out of scope under Section 21, and the deliberate non-gaps are listed after the table so they are not re-raised.
+
+Every item below is Windows-only work, matching the Next Windows Feature Queue. macOS and Linux implementations of these APIs are deferred with the rest of the cross-platform parity work and are not a precondition for closing any CG item.
+
+| ID | Work item | Status | Completion target |
+| --- | --- | --- | --- |
+| CG-01 | Window keyboard shortcuts | Complete | `app.setShortcuts()` and `window.setShortcuts()` register validated accelerators with no menu item behind them, dispatching backend-only `shortcut` events in the same style as W-06. Menu and shortcut accelerators share one native table and reject each other's combinations; ids, accelerators, and list size are validated, and `null` clears. `shortcut:register` lets an app expose registration to the page. Runtime, template, and type tests pass, and `npm run test:shortcut-native` posts a real key message that the runtime pump translates through the accelerator table. |
+| CG-02 | Directory picker and multi-select open dialog | Complete | `dialog.openDirectory()` uses `IFileOpenDialog` with `FOS_PICKFOLDERS` and `FOS_FORCEFILESYSTEM`; `dialog.openFile({ multiple: true })` returns one absolute path per selection. Both stay under `dialog:open`, and both return `null` on cancel. `npm run test:dialog` covers option validation, and `npm run test:dialog-native` opens each dialog for real and cancels it, asserting no selection is reported. Choosing several files by hand is not automated. |
+| CG-03 | Frontend framework integration guide | Complete | `wiki/Frontend-Build-Tools.md` covers the two entry settings, packaging the build output, the page directory as web root, bridge timing before mount, and the watch-and-reload loop, and is linked from the README, the wiki index, and the single-page guide. `npm run test:frontend-build` verifies each claim against a stand-in build output. No bundler dependency was added, so no example application ships; the guide is bundler-agnostic instead. |
+
+Gaps that are already tracked elsewhere and are not duplicated here:
+
+- Published prebuilt native binaries, so installing does not require a compiler: REL-02.
+- macOS and Linux feature and security parity, including parity for anything CG-01 and CG-02 add: L-06, L-07, and the parity-deferred rows in SEC-02 through SEC-07.
+
+Deliberate non-gaps, recorded so they are not queued later by mistake:
+
+- A native widget, layout, graphics, or item-model API. The page is the UI layer.
+- Color, font, input, and progress dialogs. These are ordinary HTML in this architecture.
+- Unrestricted Node access from UI code. The page/backend trust boundary is the point of the project.
 
 ### Security-First Queue
 

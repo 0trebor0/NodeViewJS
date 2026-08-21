@@ -23,6 +23,7 @@ Napi::Object Initialize(Napi::Env env, Napi::Object exports) {
   exports.Set("getWindowCounts", Napi::Function::New(env, nodeview::GetNativeWindowCounts));
   exports.Set("setMenuHandler", Napi::Function::New(env, nodeview::SetNativeMenuHandler));
   exports.Set("setApplicationMenu", Napi::Function::New(env, nodeview::SetNativeApplicationMenu));
+  exports.Set("setWindowShortcuts", Napi::Function::New(env, nodeview::SetNativeWindowShortcuts));
   exports.Set("showContextMenu", Napi::Function::New(env, nodeview::ShowNativeContextMenu));
   exports.Set("setTaskbarProgress", Napi::Function::New(env, nodeview::SetNativeTaskbarProgress));
   exports.Set("setTaskbarOverlay", Napi::Function::New(env, nodeview::SetNativeTaskbarOverlay));
@@ -34,6 +35,8 @@ Napi::Object Initialize(Napi::Env env, Napi::Object exports) {
   exports.Set("openFileDialog", Napi::Function::New(env, nodeview::OpenFileDialog));
   exports.Set("saveFileDialog", Napi::Function::New(env, nodeview::SaveFileDialog));
 #ifdef _WIN32
+  exports.Set("openMultipleFilesDialog", Napi::Function::New(env, nodeview::OpenMultipleFilesDialog));
+  exports.Set("openDirectoryDialog", Napi::Function::New(env, nodeview::OpenDirectoryDialog));
   exports.Set("readClipboardText", Napi::Function::New(env, nodeview::ReadClipboardText));
   exports.Set("writeClipboardText", Napi::Function::New(env, nodeview::WriteClipboardText));
   exports.Set("claimSingleInstance", Napi::Function::New(env, nodeview::ClaimSingleInstance));

@@ -6,6 +6,7 @@ NodeViewJS is a lightweight desktop runtime that combines a Node.js backend with
 
 - [[Getting Started]] — create, run, and package a first application.
 - [[Frontend Bridge]] — commands, events, readiness, payloads, and limits.
+- [[Frontend Build Tools]] — building the page with a bundler or framework.
 - [[Backend API]] — application, window, plugin, and helper APIs.
 - [[Lifecycle]] — startup and shutdown order, window states, and callback error semantics.
 - [[Packaging and Distribution]] — portable apps, installers, signing, and updates.

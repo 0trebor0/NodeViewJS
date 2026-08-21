@@ -3,6 +3,7 @@
 - [[Home]]
 - [[Getting Started]]
 - [[Frontend Bridge]]
+- [[Frontend Build Tools]]
 - [[Backend API]]
 - [[Lifecycle]]
 - [[Windows and Multiple Windows]]

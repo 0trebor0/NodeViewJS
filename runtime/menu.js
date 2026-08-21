@@ -5,6 +5,7 @@ const { assertDenseArray, safeDiagnosticString } = require("./validation");
 const MENU_ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/;
 const MAX_MENU_ITEMS = 256;
 const MAX_MENU_DEPTH = 8;
+const MAX_SHORTCUTS = 64;
 const NAMED_KEYS = new Map([
   ["backspace", [0x08, "Backspace"]],
   ["tab", [0x09, "Tab"]],
@@ -181,6 +182,59 @@ function normalizeContextPosition(value = {}) {
   return Object.freeze({ x: value.x, y: value.y });
 }
 
+function normalizeShortcutTemplate(value, { allowNull = false } = {}) {
+  if (allowNull && value === null) return null;
+  if (!Array.isArray(value)) throw new TypeError("Shortcut list must be an array.");
+  assertDenseArray(value, "Shortcut list");
+  if (value.length === 0) throw new TypeError("Shortcut list must contain at least one shortcut.");
+  if (value.length > MAX_SHORTCUTS) {
+    throw new RangeError(`Shortcut lists cannot contain more than ${MAX_SHORTCUTS} shortcuts.`);
+  }
+  const ids = new Set();
+  const accelerators = new Set();
+
+  return Object.freeze(value.map((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      throw new TypeError("Each shortcut must be an object.");
+    }
+    const unknown = Object.keys(item).find((key) => !["id", "accelerator"].includes(key));
+    if (unknown) throw new TypeError(`Unsupported shortcut option: ${safeDiagnosticString(unknown)}`);
+    if (typeof item.id !== "string" || !MENU_ID_PATTERN.test(item.id)) {
+      throw new TypeError("Shortcuts require a valid id.");
+    }
+    if (ids.has(item.id)) throw new TypeError(`Duplicate shortcut id: ${item.id}`);
+    ids.add(item.id);
+
+    const accelerator = normalizeAccelerator(item.accelerator);
+    if (accelerators.has(accelerator.display)) {
+      throw new TypeError(`Duplicate shortcut accelerator: ${accelerator.display}`);
+    }
+    accelerators.add(accelerator.display);
+    return Object.freeze({ id: item.id, accelerator });
+  }));
+}
+
+// Menu items and shortcuts share one native accelerator table, so a key
+// combination can only belong to one of them.
+function collectAccelerators(template) {
+  const displays = new Set();
+  (function visit(items) {
+    for (const item of items) {
+      if (item.accelerator) displays.add(item.accelerator.display);
+      if (item.submenu) visit(item.submenu);
+    }
+  })(template ?? []);
+  return displays;
+}
+
+function findAcceleratorConflict(menu, shortcuts) {
+  const shortcutAccelerators = collectAccelerators(shortcuts);
+  for (const display of collectAccelerators(menu)) {
+    if (shortcutAccelerators.has(display)) return display;
+  }
+  return undefined;
+}
+
 function normalizeTrayMenuTemplate(value, { allowNull = false } = {}) {
   const template = normalizeMenuTemplate(value, { allowNull });
   if (template === null) return null;
@@ -199,8 +253,10 @@ function normalizeTrayMenuTemplate(value, { allowNull = false } = {}) {
 }
 
 module.exports = {
+  findAcceleratorConflict,
   normalizeAccelerator,
   normalizeContextPosition,
   normalizeMenuTemplate,
+  normalizeShortcutTemplate,
   normalizeTrayMenuTemplate
 };

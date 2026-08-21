@@ -5,9 +5,11 @@
 
 #include <windows.h>
 #include <commdlg.h>
+#include <cderr.h>
 #include <dwmapi.h>
 #include <shellapi.h>
 #include <shobjidl.h>
+#include <wrl/client.h>
 
 #include <winrt/Windows.Data.Xml.Dom.h>
 #include <winrt/Windows.Foundation.h>
@@ -67,7 +69,10 @@ struct WindowState {
   HMENU tray_menu = nullptr;
   HMENU application_menu = nullptr;
   HACCEL accelerator_table = nullptr;
+  std::vector<ACCEL> menu_accelerators;
+  std::vector<ACCEL> shortcut_accelerators;
   std::map<UINT, MenuCommand> menu_commands;
+  std::map<UINT, MenuCommand> shortcut_commands;
   std::map<UINT, MenuCommand> tray_menu_commands;
   std::string taskbar_progress_state = "none";
   double taskbar_progress_value = 0;
@@ -94,7 +99,9 @@ constexpr UINT kNotificationActivatedMessage = WM_APP + 3;
 constexpr UINT kTrayShowCommand = 1001;
 constexpr UINT kTrayQuitCommand = 1002;
 constexpr UINT kFirstMenuCommand = 2000;
-constexpr UINT kLastMenuCommand = 0xefff;
+constexpr UINT kLastMenuCommand = 0xdfff;
+constexpr UINT kFirstShortcutCommand = 0xe000;
+constexpr UINT kLastShortcutCommand = 0xefff;
 constexpr UINT kFirstTrayMenuCommand = 0xf000;
 constexpr UINT kLastTrayMenuCommand = 0xffef;
 constexpr COLORREF kTransparentColorKey = RGB(1, 0, 1);
@@ -201,11 +208,39 @@ void ClearApplicationMenu(nodeview::NativeWindow& native_window) {
     DestroyMenu(state.application_menu);
     state.application_menu = nullptr;
   }
+  state.menu_commands.clear();
+  state.menu_accelerators.clear();
+}
+
+// Menu items and shortcuts share the window's single accelerator table, so it
+// is rebuilt from both sets whenever either one changes.
+void ApplyAcceleratorTable(Napi::Env env, WindowState& state) {
+  std::vector<ACCEL> accelerators = state.menu_accelerators;
+  accelerators.insert(
+      accelerators.end(),
+      state.shortcut_accelerators.begin(),
+      state.shortcut_accelerators.end());
+
+  HACCEL table = nullptr;
+  if (!accelerators.empty()) {
+    table = CreateAcceleratorTableW(
+        accelerators.data(),
+        static_cast<int>(accelerators.size()));
+    if (table == nullptr) {
+      throw Napi::Error::New(env, "Could not create the native accelerator table.");
+    }
+  }
+  if (state.accelerator_table != nullptr) DestroyAcceleratorTable(state.accelerator_table);
+  state.accelerator_table = table;
+}
+
+void ClearWindowShortcuts(WindowState& state) {
   if (state.accelerator_table != nullptr) {
     DestroyAcceleratorTable(state.accelerator_table);
     state.accelerator_table = nullptr;
   }
-  state.menu_commands.clear();
+  state.shortcut_commands.clear();
+  state.shortcut_accelerators.clear();
 }
 
 void RegisterNotificationIdentity(nodeview::NativeWindow& native_window, Napi::Env env) {
@@ -347,6 +382,7 @@ LRESULT CALLBACK WindowProcedure(HWND window, UINT message, WPARAM w_param, LPAR
   switch (message) {
     case WM_DESTROY: {
       ClearApplicationMenu(*native_window);
+      ClearWindowShortcuts(state);
       ClearTrayMenu(*native_window);
       native_window->ClearMenuHandler();
       if (state.notification_icon_added) {
@@ -448,6 +484,11 @@ LRESULT CALLBACK WindowProcedure(HWND window, UINT message, WPARAM w_param, LPAR
             command->second.id,
             command->second.checkbox,
             command->second.checked);
+        return 0;
+      }
+      if (const auto command = state.shortcut_commands.find(LOWORD(w_param));
+          command != state.shortcut_commands.end()) {
+        native_window->DispatchMenuCommand(command->second.id, false, false, "shortcut");
         return 0;
       }
       if (const auto command = state.tray_menu_commands.find(LOWORD(w_param));
@@ -1084,6 +1125,7 @@ void NativeWindow::SetApplicationMenu(const Napi::Value& menu_template) {
   auto& state = *state_;
   if (menu_template.IsNull()) {
     ClearApplicationMenu(*this);
+    ApplyAcceleratorTable(menu_template.Env(), state);
     DrawMenuBar(state.window);
     return;
   }
@@ -1098,7 +1140,6 @@ void NativeWindow::SetApplicationMenu(const Napi::Value& menu_template) {
   std::map<UINT, MenuCommand> commands;
   std::vector<ACCEL> accelerators;
   UINT next_command = kFirstMenuCommand;
-  HACCEL new_accelerator_table = nullptr;
   try {
     AppendMenuItems(
         new_menu,
@@ -1106,29 +1147,66 @@ void NativeWindow::SetApplicationMenu(const Napi::Value& menu_template) {
         commands,
         accelerators,
         next_command);
-    if (!accelerators.empty()) {
-      new_accelerator_table = CreateAcceleratorTableW(
-          accelerators.data(),
-          static_cast<int>(accelerators.size()));
-      if (new_accelerator_table == nullptr) {
-        throw Napi::Error::New(menu_template.Env(), "Could not create the native accelerator table.");
-      }
-    }
     if (!SetMenu(state.window, new_menu)) {
       throw Napi::Error::New(menu_template.Env(), "Could not attach the native application menu.");
     }
   } catch (...) {
-    if (new_accelerator_table != nullptr) DestroyAcceleratorTable(new_accelerator_table);
     DestroyMenu(new_menu);
     throw;
   }
 
   if (state.application_menu != nullptr) DestroyMenu(state.application_menu);
-  if (state.accelerator_table != nullptr) DestroyAcceleratorTable(state.accelerator_table);
   state.application_menu = new_menu;
-  state.accelerator_table = new_accelerator_table;
   state.menu_commands = std::move(commands);
+  state.menu_accelerators = std::move(accelerators);
+  ApplyAcceleratorTable(menu_template.Env(), state);
   DrawMenuBar(state.window);
+}
+
+void NativeWindow::SetShortcuts(const Napi::Value& shortcuts) {
+  auto& state = *state_;
+  const Napi::Env env = shortcuts.Env();
+  std::map<UINT, MenuCommand> commands;
+  std::vector<ACCEL> accelerators;
+
+  if (!shortcuts.IsNull()) {
+    if (!shortcuts.IsArray()) {
+      throw Napi::TypeError::New(env, "Shortcut list must be an array or null.");
+    }
+    const Napi::Array items = shortcuts.As<Napi::Array>();
+    UINT next_command = kFirstShortcutCommand;
+    for (std::uint32_t index = 0; index < items.Length(); ++index) {
+      const Napi::Value value = items.Get(index);
+      if (!value.IsObject() || value.IsArray()) {
+        throw Napi::TypeError::New(env, "Native shortcuts must be objects.");
+      }
+      const Napi::Object item = value.As<Napi::Object>();
+      const Napi::Value accelerator_value = item.Get("accelerator");
+      if (!accelerator_value.IsObject()) {
+        throw Napi::TypeError::New(env, "Native shortcuts must have an accelerator.");
+      }
+      if (next_command > kLastShortcutCommand) {
+        throw Napi::RangeError::New(env, "Native shortcut list contains too many commands.");
+      }
+      const UINT command_id = next_command++;
+      const Napi::Object accelerator = accelerator_value.As<Napi::Object>();
+      BYTE flags = FVIRTKEY;
+      if (accelerator.Get("ctrl").As<Napi::Boolean>().Value()) flags |= FCONTROL;
+      if (accelerator.Get("alt").As<Napi::Boolean>().Value()) flags |= FALT;
+      if (accelerator.Get("shift").As<Napi::Boolean>().Value()) flags |= FSHIFT;
+      accelerators.push_back(ACCEL{
+          flags,
+          static_cast<WORD>(accelerator.Get("keyCode").As<Napi::Number>().Uint32Value()),
+          static_cast<WORD>(command_id)});
+      commands.emplace(
+          command_id,
+          MenuCommand{item.Get("id").As<Napi::String>().Utf8Value(), false, false});
+    }
+  }
+
+  state.shortcut_commands = std::move(commands);
+  state.shortcut_accelerators = std::move(accelerators);
+  ApplyAcceleratorTable(env, state);
 }
 
 void NativeWindow::ShowContextMenu(
@@ -1475,8 +1553,117 @@ Napi::Value ShowFileDialog(NativeWindow& native_window, Napi::Env env, bool save
   return Napi::String::New(env, utf16_path);
 }
 
+Napi::Value ShowMultipleFilesDialog(NativeWindow& native_window, Napi::Env env) {
+  auto& state = native_window.State();
+  std::vector<wchar_t> buffer(32768);
+  OPENFILENAME dialog{};
+  dialog.lStructSize = sizeof(dialog);
+  dialog.hwndOwner = state.window;
+  dialog.lpstrFile = buffer.data();
+  dialog.nMaxFile = static_cast<DWORD>(buffer.size());
+  dialog.lpstrFilter = L"All files\0*.*\0\0";
+  dialog.Flags = OFN_EXPLORER | OFN_NOCHANGEDIR | OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST |
+      OFN_ALLOWMULTISELECT;
+
+  if (!GetOpenFileName(&dialog)) {
+    const DWORD error = CommDlgExtendedError();
+    if (error == FNERR_BUFFERTOOSMALL) {
+      throw Napi::Error::New(env, "Too many files were selected to return their paths.");
+    }
+    if (error != 0) {
+      throw Napi::Error::New(
+          env, "Open file dialog failed (code " + std::to_string(error) + ").");
+    }
+    return env.Null();
+  }
+
+  // A multi-selection is returned as the directory, then one file name per
+  // selection, each terminated by a null. A single selection is one full path.
+  const wchar_t* const end = buffer.data() + buffer.size();
+  const wchar_t* cursor = buffer.data();
+  const std::wstring first(cursor);
+  cursor += first.size() + 1;
+
+  std::vector<std::wstring> paths;
+  if (cursor >= end || *cursor == L'\0') {
+    paths.push_back(first);
+  } else {
+    std::wstring directory = first;
+    if (!directory.empty() && directory.back() != L'\\') directory += L'\\';
+    while (cursor < end && *cursor != L'\0') {
+      const std::wstring name(cursor);
+      cursor += name.size() + 1;
+      paths.push_back(directory + name);
+    }
+  }
+
+  Napi::Array selection = Napi::Array::New(env, paths.size());
+  for (std::size_t index = 0; index < paths.size(); ++index) {
+    const std::u16string utf16(
+        reinterpret_cast<const char16_t*>(paths[index].c_str()),
+        paths[index].size());
+    selection.Set(static_cast<std::uint32_t>(index), Napi::String::New(env, utf16));
+  }
+  return selection;
+}
+
+Napi::Value ShowDirectoryDialog(NativeWindow& native_window, Napi::Env env) {
+  auto& state = native_window.State();
+  Microsoft::WRL::ComPtr<IFileOpenDialog> dialog;
+  HRESULT result = CoCreateInstance(
+      CLSID_FileOpenDialog,
+      nullptr,
+      CLSCTX_INPROC_SERVER,
+      IID_PPV_ARGS(&dialog));
+  if (SUCCEEDED(result)) {
+    FILEOPENDIALOGOPTIONS options = 0;
+    result = dialog->GetOptions(&options);
+    if (SUCCEEDED(result)) {
+      // FORCEFILESYSTEM keeps the result a real path rather than a virtual
+      // shell location, which nothing on the Node side could open.
+      result = dialog->SetOptions(
+          options | FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM | FOS_PATHMUSTEXIST | FOS_NOCHANGEDIR);
+    }
+  }
+  if (FAILED(result)) {
+    throw Napi::Error::New(
+        env,
+        "Could not create the directory dialog (HRESULT:" + FormatHResult(result) +
+            "). Call this after app.run().");
+  }
+
+  result = dialog->Show(state.window);
+  if (result == HRESULT_FROM_WIN32(ERROR_CANCELLED)) return env.Null();
+  if (FAILED(result)) {
+    throw Napi::Error::New(
+        env, "Directory dialog failed (HRESULT:" + FormatHResult(result) + ").");
+  }
+
+  Microsoft::WRL::ComPtr<IShellItem> item;
+  result = dialog->GetResult(&item);
+  PWSTR selected = nullptr;
+  if (SUCCEEDED(result)) result = item->GetDisplayName(SIGDN_FILESYSPATH, &selected);
+  if (FAILED(result)) {
+    throw Napi::Error::New(
+        env, "Could not read the selected directory (HRESULT:" + FormatHResult(result) + ").");
+  }
+  const std::wstring path(selected);
+  CoTaskMemFree(selected);
+
+  const std::u16string utf16(reinterpret_cast<const char16_t*>(path.c_str()), path.size());
+  return Napi::String::New(env, utf16);
+}
+
 Napi::Value NativeWindow::OpenFileDialog(Napi::Env env) {
   return ShowFileDialog(*this, env, false);
+}
+
+Napi::Value NativeWindow::OpenMultipleFilesDialog(Napi::Env env) {
+  return ShowMultipleFilesDialog(*this, env);
+}
+
+Napi::Value NativeWindow::OpenDirectoryDialog(Napi::Env env) {
+  return ShowDirectoryDialog(*this, env);
 }
 
 Napi::Value NativeWindow::SaveFileDialog(Napi::Env env) {
@@ -1702,6 +1889,16 @@ void SetNativeApplicationMenu(const Napi::CallbackInfo& info) {
       .SetApplicationMenu(info[1]);
 }
 
+void SetNativeWindowShortcuts(const Napi::CallbackInfo& info) {
+  if (info.Length() != 2 || (!info[1].IsArray() && !info[1].IsNull())) {
+    throw Napi::TypeError::New(
+        info.Env(), "setWindowShortcuts expects a window id and shortcut array or null.");
+  }
+  GetRuntime()
+      .Window(info.Env(), GetWindowId(info, 0))
+      .SetShortcuts(info[1]);
+}
+
 void ShowNativeContextMenu(const Napi::CallbackInfo& info) {
   if (info.Length() != 3 || !info[1].IsArray() || !info[2].IsObject() || info[2].IsArray()) {
     throw Napi::TypeError::New(
@@ -1806,6 +2003,27 @@ Napi::Value OpenFileDialog(const Napi::CallbackInfo& info) {
     throw Napi::TypeError::New(info.Env(), "openFileDialog expects an optional window id.");
   }
   return GetRuntime().Window(info.Env(), GetWindowId(info, 0)).OpenFileDialog(info.Env());
+}
+
+Napi::Value OpenMultipleFilesDialog(const Napi::CallbackInfo& info) {
+  if (info.Length() == 0) {
+    return GetRuntime().PrimaryWindow(info.Env()).OpenMultipleFilesDialog(info.Env());
+  }
+  if (info.Length() != 1) {
+    throw Napi::TypeError::New(
+        info.Env(), "openMultipleFilesDialog expects an optional window id.");
+  }
+  return GetRuntime().Window(info.Env(), GetWindowId(info, 0)).OpenMultipleFilesDialog(info.Env());
+}
+
+Napi::Value OpenDirectoryDialog(const Napi::CallbackInfo& info) {
+  if (info.Length() == 0) {
+    return GetRuntime().PrimaryWindow(info.Env()).OpenDirectoryDialog(info.Env());
+  }
+  if (info.Length() != 1) {
+    throw Napi::TypeError::New(info.Env(), "openDirectoryDialog expects an optional window id.");
+  }
+  return GetRuntime().Window(info.Env(), GetWindowId(info, 0)).OpenDirectoryDialog(info.Env());
 }
 
 Napi::Value SaveFileDialog(const Napi::CallbackInfo& info) {

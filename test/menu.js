@@ -2,9 +2,11 @@
 
 const assert = require("node:assert/strict");
 const {
+  findAcceleratorConflict,
   normalizeAccelerator,
   normalizeContextPosition,
   normalizeMenuTemplate,
+  normalizeShortcutTemplate,
   normalizeTrayMenuTemplate
 } = require("../runtime/menu");
 
@@ -95,5 +97,85 @@ assert.throws(
   () => normalizeMenuTemplate([{ id: "a", label: "A", [longMenuOption]: 1 }]),
   (error) => error.message.length < 400 && /\(5000 characters\)/.test(error.message)
 );
+
+const shortcuts = normalizeShortcutTemplate([
+  { id: "search.focus", accelerator: "Ctrl+Shift+F" },
+  { id: "palette", accelerator: "F1" }
+]);
+assert.equal(shortcuts.length, 2);
+assert.equal(shortcuts[0].id, "search.focus");
+assert.equal(shortcuts[0].accelerator.display, "Ctrl+Shift+F");
+assert.equal(shortcuts[1].accelerator.keyCode, 0x70);
+assert.equal(Object.isFrozen(shortcuts), true);
+assert.equal(Object.isFrozen(shortcuts[0]), true);
+assert.equal(normalizeShortcutTemplate(null, { allowNull: true }), null);
+
+assert.throws(() => normalizeShortcutTemplate(null), /must be an array/);
+assert.throws(() => normalizeShortcutTemplate([]), /at least one shortcut/);
+assert.throws(() => normalizeShortcutTemplate(new Array(2)), /must not contain empty items/);
+// The limit itself is accepted; only the item past it is refused.
+const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
+const maximumShortcuts = normalizeShortcutTemplate(
+  Array.from({ length: 64 }, (unused, index) => ({
+    id: `s${index}`,
+    accelerator: index < 26
+      ? `Ctrl+${letters[index]}`
+      : index < 52
+        ? `Ctrl+Shift+${letters[index - 26]}`
+        : `Ctrl+Alt+${letters[index - 52]}`
+  }))
+);
+assert.equal(maximumShortcuts.length, 64);
+assert.equal(maximumShortcuts[63].accelerator.display, "Ctrl+Alt+L");
+assert.throws(
+  () => normalizeShortcutTemplate(
+    Array.from({ length: 65 }, (unused, index) => ({ id: `s${index}`, accelerator: "Ctrl+A" }))
+  ),
+  /more than 64 shortcuts/
+);
+assert.throws(() => normalizeShortcutTemplate(["Ctrl+A"]), /must be an object/);
+assert.throws(
+  () => normalizeShortcutTemplate([{ id: "a", accelerator: "Ctrl+A", label: "A" }]),
+  /Unsupported shortcut option/
+);
+assert.throws(() => normalizeShortcutTemplate([{ accelerator: "Ctrl+A" }]), /require a valid id/);
+assert.throws(
+  () => normalizeShortcutTemplate([{ id: "-bad", accelerator: "Ctrl+A" }]),
+  /require a valid id/
+);
+assert.throws(
+  () => normalizeShortcutTemplate([
+    { id: "a", accelerator: "Ctrl+A" },
+    { id: "a", accelerator: "Ctrl+B" }
+  ]),
+  /Duplicate shortcut id: a/
+);
+assert.throws(
+  () => normalizeShortcutTemplate([
+    { id: "a", accelerator: "Ctrl+A" },
+    { id: "b", accelerator: "control+a" }
+  ]),
+  /Duplicate shortcut accelerator: Ctrl\+A/
+);
+// Shortcuts reuse the menu accelerator rules, so a bare letter is still rejected.
+assert.throws(() => normalizeShortcutTemplate([{ id: "a", accelerator: "A" }]), /require Ctrl, Alt, or Shift/);
+
+// One accelerator table serves both, so a combination cannot appear in each.
+const conflictingMenu = normalizeMenuTemplate([
+  { label: "File", submenu: [{ id: "file.open", label: "Open", accelerator: "Ctrl+O" }] }
+]);
+assert.equal(
+  findAcceleratorConflict(conflictingMenu, normalizeShortcutTemplate([
+    { id: "open", accelerator: "ctrl+o" }
+  ])),
+  "Ctrl+O"
+);
+assert.equal(
+  findAcceleratorConflict(conflictingMenu, normalizeShortcutTemplate([
+    { id: "open", accelerator: "Ctrl+Shift+O" }
+  ])),
+  undefined
+);
+assert.equal(findAcceleratorConflict(null, null), undefined);
 
 console.log("Menu template test passed.");

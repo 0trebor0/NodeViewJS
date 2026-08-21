@@ -141,6 +141,14 @@ assert.equal(generatedApp.includes("NodeViewJS Starter"), false);
 assert.equal(generatedPage.includes("NodeViewJS Starter"), false);
 assert.match(generatedPage, /<title>Starter App<\/title>/);
 
+// Generated files are written with CRLF endings. A CRLF checkout of the
+// starter used to be converted a second time, producing CR CR LF, and the
+// comment strip above used to miss for the same reason.
+for (const [name, contents] of [["app.js", generatedApp], ["index.html", generatedPage]]) {
+  assert.equal(/\r\r/.test(contents), false, `${name} was given doubled carriage returns`);
+  assert.equal(/[^\r]\n/.test(contents), false, `${name} mixes bare newlines with CRLF`);
+}
+
 // The generated file must be valid JavaScript.
 new (require("node:vm").Script)(generatedApp, { filename: "app.js" });
 

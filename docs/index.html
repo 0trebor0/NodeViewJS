@@ -1597,6 +1597,52 @@ await NodeViewJS.ready();   // only for advanced startup control</code></pre><sp
     </div>
 
     <!-- ============================================================ -->
+    <h2 id="frontend-build">Frontend build tools</h2>
+
+    <p>NodeViewJS has no opinion about how the page is built. React, Vue, Svelte, Solid, or plain
+    files all work, because the page is an ordinary document in a system WebView and talks to the
+    backend through the same <code>NodeViewJS.invoke()</code> and <code>NodeViewJS.on()</code> calls.
+    What needs care is the seam between the bundler output and the runtime.</p>
+
+    <p>The word <em>entry</em> means two different things, and confusing them is the usual first
+    mistake:</p>
+
+    <div class="tablewrap">
+    <table>
+      <thead><tr><th>Setting</th><th>Points at</th><th>Used by</th></tr></thead>
+      <tbody>
+        <tr><td><code>new App({ entry })</code></td><td>The HTML page the window loads</td><td>The runtime, at startup</td></tr>
+        <tr><td><code>nodeviewjs.entry</code></td><td>The backend script</td><td>Packaging</td></tr>
+      </tbody>
+    </table>
+    </div>
+
+    <div class="codewrap"><pre><code>const app = new App({
+  title: "My App",
+  entry: path.join(__dirname, "dist", "index.html")
+});</code></pre><span class="lang">javascript</span></div>
+
+    <ul>
+      <li>Packaging copies everything in the <em>backend</em> entry's directory, so with
+      <code>app.js</code> at the project root a <code>dist/</code> build is packaged with no
+      configuration. <code>build/</code> and <code>*.map</code> are excluded by default — a bundler
+      emitting into <code>build/</code> produces a package with no page in it.</li>
+      <li>The page's own directory is the web root, so an absolute asset URL such as
+      <code>/assets/app.js</code> resolves inside <code>dist/</code>. Nothing outside that directory
+      is reachable from the page.</li>
+      <li>The bridge script is inserted at the top of <code>&lt;head&gt;</code>, ahead of the
+      bundle's own tags, so <code>window.NodeViewJS</code> exists before the code that mounts the
+      application runs.</li>
+      <li>Development reloads watch the directory holding the page, which is the build output
+      directory — run the bundler's watch mode alongside <code>nodeviewjs dev</code>. Hot module
+      replacement needs a dev server and is not supported.</li>
+    </ul>
+
+    <p>The full guide, including the packaging layouts and the checklist, is
+    <code>wiki/Frontend-Build-Tools.md</code>, and <code>npm run test:frontend-build</code> asserts
+    each of the points above against a stand-in build output.</p>
+
+    <!-- ============================================================ -->
     <h2 id="backend-api">Backend API</h2>
 
     <p>NodeViewJS exports:</p>
@@ -1874,6 +1920,31 @@ app.mainWindow.showContextMenu(contextItems, { x: 40, y: 80 });</code></pre><spa
     native menu APIs remain backend-only.</p>
 
     <!-- ============================================================ -->
+    <h3 id="shortcuts">Keyboard shortcuts</h3>
+
+    <p>A shortcut is an accelerator with no menu item behind it. Like menu items it carries a
+    bounded string ID and emits an event rather than running a native callback.</p>
+
+    <div class="codewrap"><pre><code>app.setShortcuts([
+  { id: "search.focus", accelerator: "Ctrl+Shift+F" },
+  { id: "palette", accelerator: "F1" }
+]);
+
+app.on("shortcut", ({ id, window }) =&gt; {
+  if (id === "search.focus") window.emit("focus-search");
+});</code></pre><span class="lang">javascript</span></div>
+
+    <p>Use <code>app.setShortcuts(list)</code> for the main window or
+    <code>window.setShortcuts(list)</code> for another. Passing <code>null</code> removes them. A
+    list is limited to <strong>64 shortcuts</strong>; IDs and accelerators must be unique, and the
+    accelerator syntax is the one menu items use. Shortcuts are scoped to the window that registered
+    them: they are not system-wide hotkeys, and never take a key away from another application.</p>
+
+    <p>A window has a single accelerator table, so a combination belongs either to a menu item or to
+    a shortcut. Registering the same combination in both is rejected, whichever comes second. To let
+    the page register shortcuts, expose a command requiring <code>shortcut:register</code>.</p>
+
+    <!-- ============================================================ -->
     <h2 id="commands">Commands and permissions</h2>
 
     <p>Registering a command is what makes backend behavior reachable from the frontend.</p>
@@ -1932,6 +2003,7 @@ app.command("readConfig", { permission: "fs:read", scope: "config" }, async () =
         <tr><td><code>shell:open</code></td><td>Opening external URLs or existing local paths.</td></tr>
         <tr><td><code>notification:show</code></td><td>Displaying notifications.</td></tr>
         <tr><td><code>window:control</code></td><td>Window drag, minimize, maximize, close, context menus.</td></tr>
+        <tr><td><code>shortcut:register</code></td><td>Registering window keyboard shortcuts.</td></tr>
         <tr><td><code>net:fetch</code></td><td>Outbound HTTP requests, restricted to <code>allowedOrigins</code>.</td></tr>
       </tbody>
     </table>
@@ -2129,10 +2201,18 @@ app.command("clipboard:write", { permission: "clipboard:write" },
 dialog.message({ title: "My App", message: "Finished loading." });
 
 const sourcePath = dialog.openFile();
+const sourcePaths = dialog.openFile({ multiple: true });
+const projectDirectory = dialog.openDirectory();
 const destinationPath = dialog.saveFile();</code></pre><span class="lang">javascript</span></div>
 
     <p>File helpers return the selected absolute path, or <code>null</code> when the user cancels. The
     save dialog asks before replacing an existing file.</p>
+
+    <p><code>openFile({ multiple: true })</code> returns an array of absolute paths, one per
+    selection, and still returns <code>null</code> when the dialog is cancelled.
+    <code>openDirectory()</code> picks a folder and returns its absolute path; a virtual shell
+    location with no file-system path cannot be chosen. Both are Windows-only so far, and both fall
+    under <code>dialog:open</code> rather than a permission of their own.</p>
 
     <h3 id="config">Config</h3>
     <div class="codewrap"><pre><code>const { config } = require("nodeviewjs");

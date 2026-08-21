@@ -311,6 +311,33 @@ app.mainWindow.showContextMenu([
 Accelerators support Ctrl, Alt, Shift, letters, numbers, F1–F24, and common
 navigation keys.
 
+## Keyboard shortcuts
+
+Shortcuts are accelerators with no menu item behind them. They are declarative
+in the same way menu items are: an ID and a key combination, dispatched as an
+event.
+
+```js
+app.setShortcuts([
+  { id: "search.focus", accelerator: "Ctrl+Shift+F" },
+  { id: "palette", accelerator: "F1" }
+]);
+
+app.on("shortcut", ({ id, window }) => {
+  if (id === "search.focus") window.emit("focus-search");
+});
+```
+
+Use `app.setShortcuts(list)` or `window.setShortcuts(list)`; `null` removes
+them. A list is limited to 64 shortcuts, and IDs and accelerators must be
+unique. Shortcuts are scoped to the window that registered them: they are not
+system-wide hotkeys, and never take a key away from another application.
+
+A window has one accelerator table, so a combination belongs either to a menu
+item or to a shortcut. Registering the same combination in both is rejected,
+whichever comes second. Shortcuts can be exposed to the page through a command
+holding `shortcut:register`.
+
 ## Permission-gated commands
 
 ```js
@@ -360,7 +387,7 @@ requirements. Invoking a command the backend never registered rejects with an
 
 The current permission names are `fs:read`, `fs:write`, `dialog:open`,
 `dialog:save`, `clipboard:read`, `clipboard:write`, `shell:open`,
-`notification:show`, `window:control`, and `net:fetch`.
+`notification:show`, `window:control`, `shortcut:register`, and `net:fetch`.
 
 ## Network access
 
@@ -393,7 +420,7 @@ When a command builds a request entirely from its own constants, the global `fet
 
 ## Windows
 
-`AppWindow` instances support show, hide, close, reload, minimize, maximize, restore, fullscreen, title, size, position, drag, menus, taskbar state, notifications, tray integration, and state inspection. `isOpen` reports whether a window is currently open, and `isClosed` reports whether it has been closed; a window that has not been opened yet is neither open nor closed.
+`AppWindow` instances support show, hide, close, reload, minimize, maximize, restore, fullscreen, title, size, position, drag, menus, keyboard shortcuts, taskbar state, notifications, tray integration, and state inspection. `isOpen` reports whether a window is currently open, and `isClosed` reports whether it has been closed; a window that has not been opened yet is neither open nor closed.
 
 See [[Windows and Multiple Windows]].
 
@@ -463,11 +490,20 @@ const { dialog } = require("nodeviewjs");
 
 dialog.message({ title: "My App", message: "Finished loading." });
 const sourcePath = dialog.openFile();
+const sourcePaths = dialog.openFile({ multiple: true });
+const projectDirectory = dialog.openDirectory();
 const destinationPath = dialog.saveFile();
 ```
 
 File helpers return the selected absolute path, or `null` when the user cancels.
 The save dialog asks before replacing an existing file.
+
+`openFile({ multiple: true })` returns an array of absolute paths instead, with
+one entry per selection, and still returns `null` when the dialog is cancelled.
+`openDirectory()` picks a folder and returns its absolute path; virtual shell
+locations that have no file-system path cannot be chosen. Both are Windows-only
+so far, and both are covered by `dialog:open` rather than a permission of their
+own.
 
 ### Configuration
 

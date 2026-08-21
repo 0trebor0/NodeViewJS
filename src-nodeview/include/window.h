@@ -40,6 +40,7 @@ class NativeWindow {
   Napi::Object GetState(Napi::Env env);
   void SetMenuHandler(const Napi::Function& handler);
   void SetApplicationMenu(const Napi::Value& menu_template);
+  void SetShortcuts(const Napi::Value& shortcuts);
   void ShowContextMenu(const Napi::Array& menu_template, const Napi::Object& position);
   bool TranslateAcceleratorMessage(MSG* message);
   void DispatchMenuCommand(
@@ -55,6 +56,8 @@ class NativeWindow {
   void ShowMessageDialog(const Napi::Object& options);
   void ShowNotification(const Napi::Object& options);
   Napi::Value OpenFileDialog(Napi::Env env);
+  Napi::Value OpenMultipleFilesDialog(Napi::Env env);
+  Napi::Value OpenDirectoryDialog(Napi::Env env);
   Napi::Value SaveFileDialog(Napi::Env env);
   void LoadFile(const Napi::Value& value);
   void Start(Napi::Env env);

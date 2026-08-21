@@ -130,10 +130,10 @@ TypeScript declarations for the whole public API ship with the package, so this 
 
 | Area | Summary |
 | --- | --- |
-| Windows and UI | Multiple independent windows, custom or native frames, Windows 11 title-bar colors, transparency, native and context menus, system tray, taskbar progress/overlay/attention, notifications |
+| Windows and UI | Multiple independent windows, custom or native frames, Windows 11 title-bar colors, transparency, native and context menus, keyboard shortcuts, system tray, taskbar progress/overlay/attention, notifications |
 | IPC | Versioned, schema-checked, size-bounded commands and events with per-window request state |
-| Permissions | Ten command permissions with groups, scopes, deny rules, and per-window narrowing |
-| Backend helpers | Constrained shell open, clipboard, dialogs, notifications, AppData JSON config, and an origin-allowlisted HTTP client |
+| Permissions | Eleven command permissions with groups, scopes, deny rules, and per-window narrowing |
+| Backend helpers | Constrained shell open, clipboard, file/directory dialogs, notifications, AppData JSON config, and an origin-allowlisted HTTP client |
 | Plugins | Trusted backend plugins with namespaced commands and events, declared permissions, and transactional setup |
 | Packaging | Portable folders, per-user Windows installer, macOS `.app`/DMG, Linux folders, integrity manifests, Authenticode and Developer ID signing |
 | Updates | Ed25519-signed manifests, HTTPS downloads, transactional install, rollback, and restart |
@@ -146,6 +146,7 @@ The page is untrusted; the Node.js backend is trusted. The WebView gets no `requ
 
 - [Getting Started](wiki/Getting-Started.md) — requirements, project setup, CLI, development, build
 - [Frontend Bridge](wiki/Frontend-Bridge.md) — commands, events, readiness, payload rules, bridge loading
+- [Frontend Build Tools](wiki/Frontend-Build-Tools.md) — using React, Vue, Svelte, or any bundler: entry files, packaging the build output, bridge timing, dev reloads
 - [Backend API](wiki/Backend-API.md) — app and window options, permissions, menus, tray, taskbar, helpers, plugins
 - [Lifecycle](wiki/Lifecycle.md) — startup and shutdown order, window states, and what happens when a callback throws
 - [Windows and Multiple Windows](wiki/Windows-and-Multiple-Windows.md)

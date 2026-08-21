@@ -36,6 +36,7 @@ const {
   normalizeAccelerator,
   normalizeContextPosition,
   normalizeMenuTemplate,
+  normalizeShortcutTemplate,
   normalizeTrayMenuTemplate
 } = require("../runtime/menu");
 const { normalizeNotificationOptions } = require("../runtime/notification");
@@ -524,6 +525,21 @@ record("normalizeTrayMenuTemplate", fuzz(
     assertMenuShape(result);
     for (const item of result) {
       assert.equal(item.accelerator, undefined, "accepted a tray accelerator");
+    }
+  }
+));
+
+record("normalizeShortcutTemplate", fuzz(
+  "normalizeShortcutTemplate",
+  [{ id: "search.focus", accelerator: "Ctrl+Shift+F" }],
+  (input) => normalizeShortcutTemplate(input, { allowNull: true }),
+  (result) => {
+    if (result === null) return;
+    assert.ok(Array.isArray(result), "returned a non-array shortcut list");
+    assert.ok(result.length <= 64, "returned more shortcuts than the limit");
+    for (const shortcut of result) {
+      assert.equal(typeof shortcut.id, "string", "returned a non-string id");
+      assert.equal(typeof shortcut.accelerator.display, "string", "returned a non-string accelerator");
     }
   }
 ));

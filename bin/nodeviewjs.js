@@ -133,7 +133,11 @@ function writeFile(filePath, contents) {
 // the installed package. Generating from that one source is what keeps the
 // starter, the documentation, and the smoke tests describing the same app.
 function renderStarter(fileName, title, appId) {
-  const source = fs.readFileSync(path.join(packageRoot, "examples", "basic", fileName), "utf8");
+  // A checkout can hold the starter with CRLF endings. The replacements below
+  // match on a bare newline, and writeFile puts CRLF back, so normalize first.
+  const source = fs
+    .readFileSync(path.join(packageRoot, "examples", "basic", fileName), "utf8")
+    .replace(/\r\n/g, "\n");
   const retargeted = source
     .replace(/require\("\.\.\/\.\.\/runtime"\)/g, 'require("nodeviewjs")')
     .replace(/require\("\.\.\/\.\.\/runtime"\);/g, 'require("nodeviewjs");');

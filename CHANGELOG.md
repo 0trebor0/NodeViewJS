@@ -4,6 +4,12 @@
 
 ### Added
 
+- `wiki/Frontend-Build-Tools.md` documents building the page with React, Vue, Svelte, or any bundler: which of the two `entry` settings points at the built HTML, how the build output reaches a package (`dist/` is packaged by default, `build/` and `*.map` are not), why the bridge is defined before the bundle that mounts the application runs, that the page's own directory is the web root, and how the development watch-and-reload loop pairs with a bundler's watch mode. `npm run test:frontend-build` asserts each of those against a stand-in build output, so the recipe cannot drift from the runtime without a test failing.
+
+- Directory and multi-select file dialogs: `dialog.openDirectory()` picks a folder and returns its absolute path, and `dialog.openFile({ multiple: true })` returns an array of absolute paths, one per selection. Both return `null` when the dialog is cancelled, and both are covered by the existing `dialog:open` permission. Windows only.
+
+- Keyboard shortcuts: `app.setShortcuts(list)` and `window.setShortcuts(list)` register accelerators that are not attached to a menu item, and firing one emits a backend `shortcut` event carrying the shortcut id and its window. Shortcuts are declarative in the same way menu items are, so a template can never run native code. A list holds up to 64 shortcuts with unique ids and accelerators, using the menu accelerator syntax, and `null` removes them. A window has one accelerator table, so a combination cannot belong to both a menu item and a shortcut; whichever is registered second is rejected. A new `shortcut:register` permission lets an app expose registration to the page. Windows only.
+
 - `docs/index.html` gains a Tutorials section: eighteen task-shaped walkthroughs covering commands, events, permissions, multiple windows, the window lifecycle, custom title bars, menus, tray, taskbar, notifications, dialogs and clipboard, settings persistence, network access, plugins, deep links, packaging, signed updates, and debugging. Each states a goal, numbered steps, and the observable result, so a reader can confirm the feature works rather than only read about it.
 
 - Two further dogfood applications, completing the three shapes the API is tested against: `examples/digest` is a single-window utility that grants no permissions at all, and `examples/focus` is a plugin-based focus timer using the tray, taskbar progress, notifications, single-instance launch, and a `focus://` deep link. `npm run test:example-shapes` drives both through the IPC layer, including a deep link routed through the real startup path.
@@ -34,6 +40,10 @@
 - The `window.NodeView` compatibility alias. `window.NodeViewJS` is the only browser global. Applications that used the alias must switch to `window.NodeViewJS`.
 
 ### Fixed
+
+- `nodeviewjs create` no longer copies the repository-only starter comment into the generated application, and no longer writes files with doubled carriage returns. Both happened on any checkout that stores the starter with CRLF line endings, because the generator matched and rewrote line endings assuming LF.
+
+- The installer smoke test waits for the window title of the application it actually packages instead of a hard-coded one. The title was renamed in an earlier release and the test kept waiting for the old one, so it always reported that the installed application had not opened a window.
 
 - Frontend listeners are isolated from one another. A `NodeViewJS.on()` listener that threw stopped every listener registered after it from seeing the event, and the failure escaped into the transport callback; a listener that returned a rejecting promise became an unhandled rejection in the page. Failures are now reported to the page console and the remaining listeners still run.
 - `app.quit()` now shuts down in a fixed, documented order: stop new work, notify the application, notify plugins, close windows, release IPC state, release native and process resources. Previously new windows could still be opened and new frontend messages still processed while shutdown was under way. Calling `quit()` again is a no-op, and a failure in one phase no longer prevents the later phases from releasing resources.

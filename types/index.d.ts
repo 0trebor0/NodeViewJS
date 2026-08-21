@@ -19,6 +19,7 @@ export type CommandPermission =
   | "shell:open"
   | "notification:show"
   | "window:control"
+  | "shortcut:register"
   | "net:fetch";
 
 /** A bare permission, a scoped permission (`fs:read:config`), or a group (`fs:*`). */
@@ -37,6 +38,12 @@ export interface MenuItem {
   checked?: boolean;
   enabled?: boolean;
   submenu?: readonly MenuItem[];
+}
+
+/** A keyboard shortcut that is not bound to a menu item. */
+export interface Shortcut {
+  id: string;
+  accelerator: string;
 }
 
 export interface WindowColors {
@@ -189,6 +196,7 @@ export class AppWindow {
   startDrag(): this;
   getState(): WindowState;
   setMenu(template: readonly MenuItem[] | null): this;
+  setShortcuts(list: readonly Shortcut[] | null): this;
   showContextMenu(template: readonly MenuItem[], position?: { x?: number; y?: number }): this;
   setTaskbarProgress(value: number, state?: "normal" | "paused" | "error" | "indeterminate"): this;
   setTaskbarOverlay(icon: string, description?: string): this;
@@ -266,6 +274,7 @@ export class App {
    */
   on(eventName: "before-quit", handler: (payload: BeforeQuitPayload) => unknown): Unsubscribe;
   on(eventName: "menu", handler: (payload: MenuEventPayload) => unknown): Unsubscribe;
+  on(eventName: "shortcut", handler: (payload: MenuEventPayload) => unknown): Unsubscribe;
   on(eventName: "tray-menu", handler: (payload: MenuEventPayload) => unknown): Unsubscribe;
   on(eventName: "second-instance", handler: (payload: SecondInstancePayload) => unknown): Unsubscribe;
   on(eventName: "open-url", handler: (payload: OpenUrlPayload) => unknown): Unsubscribe;
@@ -286,6 +295,7 @@ export class App {
   fetch(options: FetchOptions): Promise<FetchResult>;
   setTray(options?: TrayOptions | boolean): this;
   setMenu(template: readonly MenuItem[] | null): this;
+  setShortcuts(list: readonly Shortcut[] | null): this;
   setWindowColors(colors?: WindowColors): this;
   setTaskbarProgress(value: number, state?: "normal" | "paused" | "error" | "indeterminate"): this;
   setTaskbarOverlay(icon: string, description?: string): this;
@@ -356,6 +366,9 @@ export declare const clipboard: {
 export declare const dialog: {
   message(options: { title?: string; message: string }): void;
   openFile(): string | undefined;
+  openFile(options: { multiple?: false }): string | undefined;
+  openFile(options: { multiple: true }): string[] | undefined;
+  openDirectory(): string | undefined;
   saveFile(): string | undefined;
 };
 

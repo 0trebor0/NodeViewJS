@@ -13,6 +13,18 @@ $appName = if ($config.name) { [string]$config.name } else { "NodeViewDemo" }
 $appId = if ($config.appId) { [string]$config.appId } else { [string]$packageJson.name }
 $version = if ($metadata.version) { [string]$metadata.version } else { [string]$packageJson.version }
 $registryId = ($appName -replace '[^a-zA-Z0-9._-]', '_')
+# The window title comes from the application this repository packages, so it
+# is read from that file rather than repeated here, where it silently went
+# stale when the example was renamed.
+$entrySetting = if ($config.entry) { [string]$config.entry } else { 'app.js' }
+$entryFile = Join-Path $root $entrySetting
+$titleMatch = [regex]::Match(
+  (Get-Content -LiteralPath $entryFile -Raw),
+  'const APP_TITLE = "([^"]+)"')
+if (!$titleMatch.Success) {
+  throw "Could not read APP_TITLE from $entryFile to know which window to wait for."
+}
+$windowTitle = $titleMatch.Groups[1].Value
 $setup = Join-Path $root "build\installer\$appName-$version-setup.exe"
 $portableRoot = Join-Path $root "build\portable\$appName"
 $installRoot = Join-Path $env:LOCALAPPDATA "Programs\$registryId"
@@ -128,12 +140,12 @@ $window = [IntPtr]::Zero
 $deadline = [DateTime]::UtcNow.AddSeconds(30)
 while ($window -eq [IntPtr]::Zero -and [DateTime]::UtcNow -lt $deadline) {
   Start-Sleep -Milliseconds 250
-  $window = [NodeViewInstallerSmoke]::FindWindow("NodeViewWindow", "NodeViewJS Media Loader")
+  $window = [NodeViewInstallerSmoke]::FindWindow("NodeViewWindow", $windowTitle)
 }
 
 if ($window -eq [IntPtr]::Zero) {
   Stop-Process -Id $appProcess.Id -Force -ErrorAction SilentlyContinue
-  throw "Installed app did not open its native window."
+  throw "Installed app did not open its native window titled '$windowTitle'."
 }
 
 [NodeViewInstallerSmoke]::PostMessage($window, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null
