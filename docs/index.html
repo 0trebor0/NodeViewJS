@@ -210,6 +210,44 @@
   .card h4 { margin: 0 0 .35rem; color: var(--fg); text-transform: none; letter-spacing: -.01em; font-size: .95rem; font-weight: 650; }
   .card p { margin: 0; font-size: .875rem; color: var(--muted); }
 
+  /* ---------- tutorials ---------- */
+  .tut {
+    border: 1px solid var(--border); border-radius: 12px;
+    padding: 1.1rem 1.25rem 1.25rem; margin: 0 0 1.5rem; background: var(--bg-soft);
+  }
+  .tut > h3 { margin-top: 0; }
+  .tut-goal {
+    font-size: .9rem; color: var(--muted);
+    border-left: 3px solid var(--accent); padding-left: .7rem; margin: 0 0 1rem;
+  }
+  .tut-goal strong { color: var(--fg); }
+  ol.steps { counter-reset: step; list-style: none; padding-left: 0; margin: 0; }
+  ol.steps > li {
+    counter-increment: step; position: relative;
+    padding-left: 2.1rem; margin: 0 0 1.1rem;
+  }
+  ol.steps > li::before {
+    content: counter(step); position: absolute; left: 0; top: .05rem;
+    width: 1.5rem; height: 1.5rem; border-radius: 50%;
+    background: var(--accent); color: #fff;
+    font: 700 .78rem/1.5rem var(--sans); text-align: center;
+  }
+  ol.steps > li > :first-child { margin-top: 0; }
+  .tut-result {
+    margin: 1rem 0 0; padding: .7rem .9rem; border-radius: 8px;
+    background: var(--bg); border: 1px solid var(--border); font-size: .9rem;
+  }
+  .tut-result strong {
+    display: block; font-size: .72rem; text-transform: uppercase;
+    letter-spacing: .05em; color: var(--muted); margin-bottom: .25rem;
+  }
+  .tut-index { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: .5rem; margin: 0 0 1.75rem; }
+  .tut-index a {
+    display: block; padding: .5rem .7rem; border: 1px solid var(--border);
+    border-radius: 8px; background: var(--bg-soft); font-size: .875rem;
+  }
+  .tut-index a:hover { border-color: var(--accent); background: var(--accent-soft); text-decoration: none; }
+  .tut-index a span { display: block; color: var(--muted); font-size: .78rem; }
   .platforms { display: flex; gap: .4rem; flex-wrap: wrap; margin: -.5rem 0 1rem; }
   .plat { font: 600 .7rem/1 var(--sans); letter-spacing: .04em; text-transform: uppercase;
           padding: .28rem .5rem; border-radius: 5px; border: 1px solid var(--border); color: var(--muted); }
@@ -527,6 +565,902 @@ app.run();</code></pre><span class="lang">javascript</span></div>
     <p>The CLI packages the <em>current</em> project — not the NodeViewJS demo — and writes
     <code>build/portable/MyApp/</code>. If the native addon or launcher is missing, packaging builds
     the runtime first.</p>
+
+    <!-- ============================================================ -->
+    <h2 id="tutorials">Tutorials</h2>
+
+    <p>Each tutorial is a short, self-contained build: a goal, numbered steps you can paste, and what
+    you should see when it works. They assume a project from <a href="#quick-start">Quick start</a>.
+    Run everything with <code>npm run dev</code> unless a tutorial says otherwise.</p>
+
+    <div class="tut-index">
+      <a href="#tut-hello">1. Hello, backend<span>invoke a command</span></a>
+      <a href="#tut-events">2. Two-way events<span>on, once, emit</span></a>
+      <a href="#tut-permissions">3. Permissions<span>scopes and deny rules</span></a>
+      <a href="#tut-windows">4. A second window<span>createWindow, targeting</span></a>
+      <a href="#tut-lifecycle">5. Window lifecycle<span>states and before-quit</span></a>
+      <a href="#tut-titlebar">6. Custom title bar<span>frameless chrome</span></a>
+      <a href="#tut-menus">7. Menus<span>app and context menus</span></a>
+      <a href="#tut-tray">8. System tray<span>tray menu, close to hide</span></a>
+      <a href="#tut-taskbar">9. Taskbar<span>progress, overlay, attention</span></a>
+      <a href="#tut-notifications">10. Notifications<span>toasts from the backend</span></a>
+      <a href="#tut-dialogs">11. Dialogs and clipboard<span>native pickers</span></a>
+      <a href="#tut-config">12. Saving settings<span>config read and write</span></a>
+      <a href="#tut-network">13. Calling an API<span>net:fetch and allowedOrigins</span></a>
+      <a href="#tut-plugins">14. Writing a plugin<span>namespaced commands</span></a>
+      <a href="#tut-deeplinks">15. Deep links<span>single instance, protocols</span></a>
+      <a href="#tut-package">16. Shipping it<span>portable and installer</span></a>
+      <a href="#tut-updates">17. Signed updates<span>Ed25519 manifests</span></a>
+      <a href="#tut-debug">18. Debugging<span>doctor, logs, tests</span></a>
+    </div>
+
+    <!-- 1 -->
+    <div class="tut">
+      <h3 id="tut-hello">1. Hello, backend</h3>
+      <p class="tut-goal"><strong>Goal:</strong> call a Node.js function from the page and show the
+      result. This is the whole model in miniature — the frontend never touches Node, it asks the
+      backend to do the work.</p>
+      <ol class="steps">
+        <li>
+          <p>Register a command in <code>app.js</code>. Validate the payload: it arrives from the
+          WebView and is untrusted, even though the page is your own code.</p>
+          <div class="codewrap"><pre><code>const path = require("node:path");
+const os = require("node:os");
+const { App } = require("nodeviewjs");
+
+const app = new App({
+  title: "Tutorial",
+  width: 800,
+  height: 560,
+  entry: path.join(__dirname, "index.html")
+});
+
+app.command("system:describe", (label) =&gt; {
+  if (typeof label !== "string" || label.trim() === "") {
+    throw new TypeError("label must be a non-empty string.");
+  }
+  return {
+    label,
+    platform: process.platform,
+    node: process.versions.node,
+    cpus: os.cpus().length
+  };
+});
+
+app.run();</code></pre><span class="lang">javascript</span></div>
+        </li>
+        <li>
+          <p>Call it from <code>index.html</code>. There is no bridge script tag —
+          <code>window.NodeViewJS</code> is already there.</p>
+          <div class="codewrap"><pre><code>&lt;button id="go"&gt;Describe this machine&lt;/button&gt;
+&lt;pre id="out"&gt;&lt;/pre&gt;
+
+&lt;script&gt;
+  document.querySelector("#go").onclick = async () =&gt; {
+    const out = document.querySelector("#out");
+    try {
+      const info = await NodeViewJS.invoke("system:describe", "my machine");
+      out.textContent = JSON.stringify(info, null, 2);
+    } catch (error) {
+      out.textContent = "Failed: " + error.message;
+    }
+  };
+&lt;/script&gt;</code></pre><span class="lang">html</span></div>
+        </li>
+        <li>
+          <p>Prove the validation runs. Change the call to
+          <code>NodeViewJS.invoke("system:describe", "")</code> and click again.</p>
+        </li>
+      </ol>
+      <div class="tut-result">
+        <strong>You should see</strong>
+        Platform, Node version, and CPU count in the page. With the empty label the
+        <code>invoke()</code> promise rejects and you get
+        <em>Failed: label must be a non-empty string.</em> — the backend threw, and the error crossed
+        the bridge intact.
+      </div>
+    </div>
+
+    <!-- 2 -->
+    <div class="tut">
+      <h3 id="tut-events">2. Two-way events</h3>
+      <p class="tut-goal"><strong>Goal:</strong> push updates from the backend without the page
+      polling, and send fire-and-forget notices back. Use <code>invoke()</code> when you need an
+      answer; use events when you do not.</p>
+      <ol class="steps">
+        <li>
+          <p>Emit on a timer from the backend, and listen for a message from the page.</p>
+          <div class="codewrap"><pre><code>app.on("page:opened", ({ page }) =&gt; {
+  console.log("Frontend opened:", page);
+});
+
+// Safe before run(): events buffer until the bridge is ready.
+app.emit("clock:tick", { at: new Date().toISOString() });
+
+setInterval(() =&gt; {
+  app.emit("clock:tick", { at: new Date().toISOString() });
+}, 1000).unref();
+
+app.run();</code></pre><span class="lang">javascript</span></div>
+        </li>
+        <li>
+          <p>Subscribe in the page. <code>on()</code> returns an unsubscribe function and registers
+          synchronously, so never <code>await</code> it.</p>
+          <div class="codewrap"><pre><code>&lt;p id="clock"&gt;waiting…&lt;/p&gt;
+&lt;button id="stop"&gt;Stop listening&lt;/button&gt;
+
+&lt;script&gt;
+  const unsubscribe = NodeViewJS.on("clock:tick", ({ at }) =&gt; {
+    document.querySelector("#clock").textContent = at;
+  });
+
+  NodeViewJS.once("clock:tick", () =&gt; console.log("first tick only"));
+  NodeViewJS.emit("page:opened", { page: "home" });
+
+  document.querySelector("#stop").onclick = () =&gt; unsubscribe();
+&lt;/script&gt;</code></pre><span class="lang">html</span></div>
+        </li>
+      </ol>
+      <div class="tut-result">
+        <strong>You should see</strong>
+        The timestamp updating once a second, <em>Frontend opened: home</em> in your terminal, and
+        <em>first tick only</em> once in DevTools. Clicking Stop freezes the clock while the backend
+        keeps emitting — the events still arrive and are simply discarded.
+      </div>
+    </div>
+
+    <!-- 3 -->
+    <div class="tut">
+      <h3 id="tut-permissions">3. Permissions</h3>
+      <p class="tut-goal"><strong>Goal:</strong> gate commands behind named permissions, and watch a
+      deny rule beat a wildcard allow.</p>
+      <ol class="steps">
+        <li>
+          <p>Give the app a policy with both an allow and a deny rule.</p>
+          <div class="codewrap"><pre><code>const app = new App({
+  entry: path.join(__dirname, "index.html"),
+  permissions: {
+    allow: ["fs:*", "clipboard:read"],
+    deny: ["fs:write"]
+  }
+});
+
+app.command("notes:read",  { permission: "fs:read",  scope: "notes" }, () =&gt; "the notes");
+app.command("notes:write", { permission: "fs:write", scope: "notes" }, () =&gt; "saved");</code></pre><span class="lang">javascript</span></div>
+        </li>
+        <li>
+          <p>Call both from the page.</p>
+          <div class="codewrap"><pre><code>for (const name of ["notes:read", "notes:write"]) {
+  try {
+    console.log(name, "=&gt;", await NodeViewJS.invoke(name));
+  } catch (error) {
+    console.log(name, "=&gt; refused:", error.message);
+  }
+}</code></pre><span class="lang">javascript</span></div>
+        </li>
+      </ol>
+      <div class="tut-result">
+        <strong>You should see</strong>
+        <code>notes:read</code> returns, and <code>notes:write</code> is refused even though
+        <code>fs:*</code> was allowed — <strong>deny always beats allow</strong>. Permissions are
+        checked when the command runs, not when it is registered, so registration never throws for a
+        missing grant.
+      </div>
+    </div>
+
+    <!-- 4 -->
+    <div class="tut">
+      <h3 id="tut-windows">4. A second window</h3>
+      <p class="tut-goal"><strong>Goal:</strong> open an independent window with its own page and a
+      narrower permission policy, then send an event to just that window.</p>
+      <ol class="steps">
+        <li>
+          <p>Create it. Unspecified options inherit from the main window.</p>
+          <div class="codewrap"><pre><code>const settings = app.createWindow({
+  title: "Settings",
+  width: 520,
+  height: 420,
+  entry: path.join(__dirname, "settings.html"),
+  permissions: ["clipboard:read"]
+});
+
+settings.on("settings:saved", (value) =&gt; console.log("saved", value));
+
+app.run();</code></pre><span class="lang">javascript</span></div>
+        </li>
+        <li>
+          <p>Target one window, or broadcast to all of them.</p>
+          <div class="codewrap"><pre><code>settings.emit("theme:changed", { theme: "dark" });  // this window only
+app.emit("theme:changed", { theme: "dark" });       // every open window</code></pre><span class="lang">javascript</span></div>
+        </li>
+      </ol>
+      <div class="tut-result">
+        <strong>You should see</strong>
+        Two native windows, each with its own WebView and IPC channel. A command invoked from
+        <code>settings.html</code> must satisfy both the app policy and that window's narrower one —
+        the app policy is always the maximum grant.
+      </div>
+    </div>
+
+    <!-- 5 -->
+    <div class="tut">
+      <h3 id="tut-lifecycle">5. Window lifecycle</h3>
+      <p class="tut-goal"><strong>Goal:</strong> observe the four window states, flush state on
+      shutdown, and understand why a closed window sometimes disappears from
+      <code>app.windows</code> and sometimes does not.</p>
+      <ol class="steps">
+        <li>
+          <p>Read <code>lifecycleState</code> as a window moves through its life.</p>
+          <div class="codewrap"><pre><code>const preview = app.createWindow({
+  title: "Preview",
+  entry: path.join(__dirname, "preview.html")
+});
+
+console.log(preview.lifecycleState);   // "configured" - created, never opened
+
+app.run();
+console.log(preview.lifecycleState);   // "open"
+
+preview.close();
+console.log(preview.lifecycleState);   // "disposed" - closed while running
+console.log(app.windows.includes(preview)); // false</code></pre><span class="lang">javascript</span></div>
+        </li>
+        <li>
+          <p>Flush state before the app exits. <code>before-quit</code> is synchronous — a promise you
+          return is reported but <strong>not awaited</strong>, so do the work inline or in a plugin
+          <code>stop</code> hook.</p>
+          <div class="codewrap"><pre><code>app.on("before-quit", ({ windows }) =&gt; {
+  console.log("closing with", windows, "window(s) open");
+  saveEverythingSynchronously();
+});</code></pre><span class="lang">javascript</span></div>
+        </li>
+        <li>
+          <p>Guard an emit when a window may already be gone.</p>
+          <div class="codewrap"><pre><code>if (!preview.isClosed) {
+  preview.emit("refresh");
+}</code></pre><span class="lang">javascript</span></div>
+        </li>
+      </ol>
+      <div class="tut-result">
+        <strong>You should see</strong>
+        <code>configured</code>, then <code>open</code>, then <code>disposed</code>. Emitting at a
+        disposed window throws rather than queueing events nothing will ever deliver. A window closed
+        <em>before</em> <code>run()</code> becomes <code>closed</code> instead and stays in
+        <code>app.windows</code>, because a failed startup can be retried and reopen it.
+      </div>
+    </div>
+
+    <!-- 6 -->
+    <div class="tut">
+      <h3 id="tut-titlebar">6. Custom title bar</h3>
+      <div class="platforms"><span class="plat win">Windows 10 and 11</span></div>
+      <p class="tut-goal"><strong>Goal:</strong> replace the native title bar with your own HTML and
+      CSS, and wire the window controls through permission-gated commands.</p>
+      <ol class="steps">
+        <li>
+          <p>Turn off the native frame and expose the three controls the page needs.</p>
+          <div class="codewrap"><pre><code>const app = new App({
+  entry: path.join(__dirname, "index.html"),
+  frame: false
+});
+
+const control = { permission: "window:control" };
+
+app.command("window:startDrag", control, () =&gt; { app.mainWindow.startDrag(); return true; });
+app.command("window:minimize",  control, () =&gt; { app.mainWindow.minimize();  return true; });
+app.command("window:close",     control, () =&gt; {
+  // Let the IPC response finish before the window is destroyed.
+  setImmediate(() =&gt; app.mainWindow.close());
+  return true;
+});
+
+app.run();</code></pre><span class="lang">javascript</span></div>
+        </li>
+        <li>
+          <p>Build the bar. <code>pointerdown</code> anywhere but a button starts a native drag.</p>
+          <div class="codewrap"><pre><code>&lt;style&gt;
+  html, body { margin: 0; }
+  .titlebar {
+    height: 36px; display: flex; align-items: center;
+    background: #162033; color: #fff; user-select: none;
+  }
+  .titlebar-title { flex: 1; padding-left: 12px; font: 13px system-ui; }
+  .titlebar button { width: 46px; height: 36px; border: 0; background: transparent; color: inherit; }
+  .titlebar button:hover { background: #2b3b58; }
+  .titlebar .close:hover { background: #c42b1c; }
+&lt;/style&gt;
+
+&lt;header class="titlebar"&gt;
+  &lt;span class="titlebar-title"&gt;My App&lt;/span&gt;
+  &lt;button id="min" aria-label="Minimize"&gt;&amp;#x2212;&lt;/button&gt;
+  &lt;button id="close" class="close" aria-label="Close"&gt;&amp;#x2715;&lt;/button&gt;
+&lt;/header&gt;
+
+&lt;script&gt;
+  document.querySelector(".titlebar").addEventListener("pointerdown", (event) =&gt; {
+    if (event.target.closest("button")) return;
+    NodeViewJS.invoke("window:startDrag");
+  });
+  document.querySelector("#min").onclick   = () =&gt; NodeViewJS.invoke("window:minimize");
+  document.querySelector("#close").onclick = () =&gt; NodeViewJS.invoke("window:close");
+&lt;/script&gt;</code></pre><span class="lang">html</span></div>
+        </li>
+      </ol>
+      <div class="tut-result">
+        <strong>You should see</strong>
+        A frameless window you can drag by its bar, minimize, and close. If closing feels flaky, check
+        that <code>setImmediate()</code> is still wrapping <code>close()</code> — without it the window
+        can be destroyed before the reply is sent.
+      </div>
+    </div>
+
+    <!-- 7 -->
+    <div class="tut">
+      <h3 id="tut-menus">7. Menus</h3>
+      <p class="tut-goal"><strong>Goal:</strong> add an application menu and a right-click context
+      menu. Menu templates are data, not callbacks — items carry string IDs and emit a backend event.</p>
+      <ol class="steps">
+        <li>
+          <p>Describe the menu and handle its events. One <code>menu</code> handler serves both the
+          application menu and context menus.</p>
+          <div class="codewrap"><pre><code>const app = new App({
+  entry: path.join(__dirname, "index.html"),
+  menu: [
+    {
+      label: "File",
+      submenu: [
+        { id: "file.open", label: "Open", accelerator: "Ctrl+O" },
+        { type: "separator" },
+        { id: "file.autosave", label: "Auto save", type: "checkbox", checked: true }
+      ]
+    }
+  ]
+});
+
+app.on("menu", ({ id, checked, window }) =&gt; {
+  if (id === "file.open") console.log("Open, from window", window.id);
+  if (id === "file.autosave") console.log("Auto save:", checked);
+});</code></pre><span class="lang">javascript</span></div>
+        </li>
+        <li>
+          <p>Show a context menu. Native menu APIs are backend-only, so route the page's request
+          through a <code>window:control</code> command.</p>
+          <div class="codewrap"><pre><code>app.command("menu:context", { permission: "window:control" }, ({ x, y }) =&gt; {
+  app.mainWindow.showContextMenu([
+    { id: "edit.copy", label: "Copy", accelerator: "Ctrl+C" },
+    { id: "edit.delete", label: "Delete" }
+  ], { x, y });
+  return true;
+});</code></pre><span class="lang">javascript</span></div>
+          <div class="codewrap"><pre><code>window.addEventListener("contextmenu", (event) =&gt; {
+  event.preventDefault();
+  NodeViewJS.invoke("menu:context", { x: event.clientX, y: event.clientY });
+});</code></pre><span class="lang">javascript</span></div>
+        </li>
+        <li>
+          <p>Swap the menu at runtime with <code>app.setMenu(template)</code>, or remove it with
+          <code>app.setMenu(null)</code>.</p>
+        </li>
+      </ol>
+      <div class="tut-result">
+        <strong>You should see</strong>
+        A File menu with a working <kbd>Ctrl+O</kbd> accelerator and a checkbox that reports its new
+        state. Templates are capped at 256 items and eight levels, and IDs and accelerators must be
+        unique — a duplicate throws when you build the menu, not silently later.
+      </div>
+    </div>
+
+    <!-- 8 -->
+    <div class="tut">
+      <h3 id="tut-tray">8. System tray</h3>
+      <p class="tut-goal"><strong>Goal:</strong> keep the app alive in the tray when the window is
+      closed, with a custom tray menu.</p>
+      <ol class="steps">
+        <li>
+          <p>Set <code>closeToHide</code> so the close button hides instead of quitting, and give the
+          tray a menu.</p>
+          <div class="codewrap"><pre><code>const app = new App({
+  title: "My App",
+  entry: path.join(__dirname, "index.html"),
+  closeToHide: true,
+  tray: {
+    title: "My App",
+    icon: process.env.NODEVIEW_APP_ICON,
+    menu: [
+      { id: "tray.show", label: "Show" },
+      { id: "tray.enabled", label: "Enabled", type: "checkbox", checked: true },
+      { type: "separator" },
+      { id: "tray.quit", label: "Quit" }
+    ]
+  }
+});
+
+app.on("tray-menu", ({ id, checked }) =&gt; {
+  if (id === "tray.show") app.show();
+  if (id === "tray.quit") app.quit();
+  if (id === "tray.enabled") console.log("Enabled:", checked);
+});
+
+app.run();</code></pre><span class="lang">javascript</span></div>
+        </li>
+        <li>
+          <p>Omit <code>menu</code> entirely for the built-in Show and Quit items.</p>
+        </li>
+      </ol>
+      <div class="tut-result">
+        <strong>You should see</strong>
+        Closing the window hides it and leaves a tray icon; Show brings it back and Quit exits for
+        real. Double-clicking the icon always shows the window. Tray accelerators are rejected on
+        purpose — a tray menu is not focused, so a shortcut there could never fire.
+      </div>
+    </div>
+
+    <!-- 9 -->
+    <div class="tut">
+      <h3 id="tut-taskbar">9. Taskbar feedback</h3>
+      <div class="platforms"><span class="plat win">Windows</span></div>
+      <p class="tut-goal"><strong>Goal:</strong> show progress on the taskbar button, badge it, and
+      flash for attention. All of these require <code>app.run()</code> to have happened.</p>
+      <ol class="steps">
+        <li>
+          <p>Drive progress from a real task. Values run from <code>0</code> to <code>1</code>.</p>
+          <div class="codewrap"><pre><code>app.command("job:start", async () =&gt; {
+  for (let done = 0; done &lt;= 10; done += 1) {
+    app.setTaskbarProgress(done / 10, "normal");
+    await new Promise((resolve) =&gt; setTimeout(resolve, 200));
+  }
+  app.setTaskbarProgress(null);          // clear it
+  app.requestAttention("informational"); // flash the button
+  return "done";
+});</code></pre><span class="lang">javascript</span></div>
+        </li>
+        <li>
+          <p>Add an overlay badge. It must be an existing <code>.ico</code> file.</p>
+          <div class="codewrap"><pre><code>app.setTaskbarOverlay("assets/badge.ico", "3 unread");
+app.setTaskbarOverlay(null); // remove it</code></pre><span class="lang">javascript</span></div>
+        </li>
+      </ol>
+      <div class="tut-result">
+        <strong>You should see</strong>
+        The taskbar button filling as the loop runs, then clearing and flashing. States are
+        <code>normal</code>, <code>paused</code>, <code>error</code>, and <code>indeterminate</code>;
+        attention takes <code>informational</code>, <code>critical</code>, or <code>stop</code>. Every
+        one of these is also available per window on an <code>AppWindow</code>.
+      </div>
+    </div>
+
+    <!-- 10 -->
+    <div class="tut">
+      <h3 id="tut-notifications">10. Notifications</h3>
+      <p class="tut-goal"><strong>Goal:</strong> raise a native toast that carries your app's identity
+      rather than <em>Node.js JavaScript Runtime</em>.</p>
+      <ol class="steps">
+        <li>
+          <p>Set a stable <code>appId</code> and <code>title</code> — Windows caches notification
+          identity against them, so keep both constant across releases.</p>
+          <div class="codewrap"><pre><code>const app = new App({
+  title: "My App",
+  appId: "com.example.my-app",
+  icon: process.env.NODEVIEW_APP_ICON,
+  entry: path.join(__dirname, "index.html")
+});
+
+app.run();
+app.showNotification({ title: "My App", message: "Finished loading." });</code></pre><span class="lang">javascript</span></div>
+        </li>
+        <li>
+          <p>Let the page request one through a narrow command rather than exposing the helper.</p>
+          <div class="codewrap"><pre><code>app.command("notify", { permission: "notification:show" }, ({ title, message }) =&gt; {
+  app.showNotification({ title, message });
+  return true;
+});</code></pre><span class="lang">javascript</span></div>
+        </li>
+      </ol>
+      <div class="tut-result">
+        <strong>You should see</strong>
+        A toast headed with your app title. Titles cap at 63 characters and messages at 255. If nothing
+        appears, check Windows Settings → System → Notifications, and Focus Assist — the OS can
+        suppress toasts entirely without an error reaching your code.
+      </div>
+    </div>
+
+    <!-- 11 -->
+    <div class="tut">
+      <h3 id="tut-dialogs">11. Dialogs and clipboard</h3>
+      <p class="tut-goal"><strong>Goal:</strong> ask the user to pick a file and copy text, both
+      through permission-gated commands. These helpers are backend-only by design.</p>
+      <ol class="steps">
+        <li>
+          <p>Wire up the dialog helpers. They return an absolute path, or <code>null</code> when the
+          user cancels — always handle the cancel.</p>
+          <div class="codewrap"><pre><code>const { App, dialog, clipboard } = require("nodeviewjs");
+
+const app = new App({
+  entry: path.join(__dirname, "index.html"),
+  permissions: ["dialog:open", "dialog:save", "clipboard:*"]
+});
+
+app.command("file:pick", { permission: "dialog:open" }, () =&gt; {
+  const selected = dialog.openFile();
+  if (selected === null) return { cancelled: true };
+  return { cancelled: false, path: selected };
+});</code></pre><span class="lang">javascript</span></div>
+        </li>
+        <li>
+          <p>Add clipboard access. Null characters are rejected, because the Windows clipboard text
+          format is null-terminated.</p>
+          <div class="codewrap"><pre><code>app.command("clip:copy", { permission: "clipboard:write" }, ({ text }) =&gt; {
+  if (typeof text !== "string") throw new TypeError("text must be a string.");
+  return clipboard.writeText(text);
+});
+
+app.command("clip:paste", { permission: "clipboard:read" }, () =&gt; clipboard.readText());</code></pre><span class="lang">javascript</span></div>
+        </li>
+      </ol>
+      <div class="tut-result">
+        <strong>You should see</strong>
+        A native file picker, and text moving in and out of the system clipboard.
+        <code>clipboard.readText()</code> returns an empty string when the clipboard holds something
+        that is not text — not an error, so check for <code>""</code>.
+      </div>
+    </div>
+
+    <!-- 12 -->
+    <div class="tut">
+      <h3 id="tut-config">12. Saving settings</h3>
+      <p class="tut-goal"><strong>Goal:</strong> persist user preferences to the per-user application
+      data directory, and survive a first run where the file does not exist yet.</p>
+      <ol class="steps">
+        <li>
+          <p>Read with defaults. A missing file is not an error — you get the defaults back.</p>
+          <div class="codewrap"><pre><code>const { config } = require("nodeviewjs");
+
+const FILE = { appName: "MyApp", fileName: "settings.json" };
+
+app.command("settings:load", async () =&gt; {
+  return config.read({ ...FILE, defaults: { theme: "light", zoom: 1 } });
+});</code></pre><span class="lang">javascript</span></div>
+        </li>
+        <li>
+          <p>Write it back, validating first. The payload came from the page.</p>
+          <div class="codewrap"><pre><code>const THEMES = new Set(["light", "dark"]);
+
+app.command("settings:save", async ({ theme, zoom }) =&gt; {
+  if (!THEMES.has(theme)) throw new TypeError("Unknown theme.");
+  if (typeof zoom !== "number" || !(zoom &gt;= 0.5 &amp;&amp; zoom &lt;= 3)) {
+    throw new RangeError("zoom must be between 0.5 and 3.");
+  }
+  await config.write({ ...FILE, data: { theme, zoom } });
+  app.emit("settings:changed", { theme, zoom });
+  return true;
+});</code></pre><span class="lang">javascript</span></div>
+        </li>
+      </ol>
+      <div class="tut-result">
+        <strong>You should see</strong>
+        Settings surviving a restart, stored under the user's app-data directory rather than beside the
+        executable. File names must be a plain <code>.json</code> name — no directories, no traversal,
+        255 characters maximum — so a caller cannot steer the write somewhere else.
+      </div>
+    </div>
+
+    <!-- 13 -->
+    <div class="tut">
+      <h3 id="tut-network">13. Calling an API</h3>
+      <p class="tut-goal"><strong>Goal:</strong> reach an HTTP API from the page. The WebView itself
+      cannot touch the network, so the backend makes the request on its behalf.</p>
+      <ol class="steps">
+        <li>
+          <p>Grant <code>net:fetch</code> and list the origins the app may reach. With no
+          <code>allowedOrigins</code>, no request can be made at all.</p>
+          <div class="codewrap"><pre><code>const app = new App({
+  entry: path.join(__dirname, "index.html"),
+  permissions: ["net:fetch"],
+  allowedOrigins: ["https://api.github.com"]
+});</code></pre><span class="lang">javascript</span></div>
+        </li>
+        <li>
+          <p>Expose a command that controls the shape of the URL. Never let the frontend supply the
+          host — give it only the part it needs, and validate that.</p>
+          <div class="codewrap"><pre><code>app.command("gh:repo", { permission: "net:fetch" }, async ({ owner, name }) =&gt; {
+  const SEGMENT = /^[A-Za-z0-9._-]{1,100}$/;
+  if (!SEGMENT.test(owner ?? "") || !SEGMENT.test(name ?? "")) {
+    throw new TypeError("owner and name must be simple path segments.");
+  }
+  const response = await app.fetch({
+    url: `https://api.github.com/repos/${owner}/${name}`,
+    headers: { accept: "application/vnd.github+json" }
+  });
+  if (!response.ok) throw new Error(`GitHub returned ${response.status}`);
+  const repo = JSON.parse(response.body);
+  return { stars: repo.stargazers_count, description: repo.description };
+});</code></pre><span class="lang">javascript</span></div>
+        </li>
+        <li>
+          <p>Call it, then try to break out by asking for a different host.</p>
+          <div class="codewrap"><pre><code>console.log(await NodeViewJS.invoke("gh:repo", { owner: "0trebor0", name: "NodeViewJS" }));
+
+// The regex refuses this before any request is made.
+await NodeViewJS.invoke("gh:repo", { owner: "../..", name: "x" });</code></pre><span class="lang">javascript</span></div>
+        </li>
+      </ol>
+      <div class="tut-result">
+        <strong>You should see</strong>
+        Star count and description in the page, and a rejection for the traversal attempt.
+        <code>app.fetch()</code> binds the app's allowlist, so a command cannot widen it; redirects are
+        re-checked on every hop, and <code>Host</code> and <code>Cookie</code> headers cannot be set by
+        the caller. When a command builds a URL entirely from its own constants, the global
+        <code>fetch()</code> is equivalent and simpler.
+      </div>
+    </div>
+
+    <!-- 14 -->
+    <div class="tut">
+      <h3 id="tut-plugins">14. Writing a plugin</h3>
+      <p class="tut-goal"><strong>Goal:</strong> package a feature as a plugin with namespaced
+      commands and events, so it can be dropped into another app without touching that app's wiring.</p>
+      <ol class="steps">
+        <li>
+          <p>Write the plugin. Every hook is optional; <code>setup</code> may return a cleanup
+          function, and it runs before <code>app.run()</code>.</p>
+          <div class="codewrap"><pre><code>const counterPlugin = {
+  name: "example.counter",
+  version: "1.0.0",
+  permissions: ["fs:read:counter"],
+  setup(plugin, options) {
+    let count = options.start ?? 0;
+
+    plugin.command("increment", { permission: "fs:read", scope: "counter" }, () =&gt; ++count);
+    plugin.command("value", () =&gt; count);
+    plugin.on("reset", () =&gt; { count = options.start ?? 0; });
+
+    return () =&gt; console.log("counter cleaned up");
+  },
+  start(plugin) {
+    plugin.emit("ready", { start: 0 });
+  },
+  stop() {
+    console.log("counter stopping");
+  }
+};</code></pre><span class="lang">javascript</span></div>
+        </li>
+        <li>
+          <p>Register it. The app policy must already grant every permission the plugin declares.</p>
+          <div class="codewrap"><pre><code>const app = new App({
+  entry: path.join(__dirname, "index.html"),
+  permissions: ["fs:read:counter"]
+});
+
+app.use(counterPlugin, { start: 10 });
+app.run();</code></pre><span class="lang">javascript</span></div>
+        </li>
+        <li>
+          <p>Call it from the page. Everything is namespaced under the plugin name.</p>
+          <div class="codewrap"><pre><code>NodeViewJS.on("example.counter:ready", () =&gt; console.log("counter ready"));
+
+await NodeViewJS.invoke("example.counter:increment"); // 11
+await NodeViewJS.invoke("example.counter:value");     // 11
+
+NodeViewJS.emit("example.counter:reset");</code></pre><span class="lang">javascript</span></div>
+        </li>
+      </ol>
+      <div class="tut-result">
+        <strong>You should see</strong>
+        The counter starting at 10 and incrementing. Setup is transactional — if a plugin throws
+        during setup, nothing it registered is left behind. Plugin names must be lowercase
+        dot-or-hyphen identifiers, and <code>app.use()</code> throws after <code>run()</code>.
+        <br><br>
+        Plugins are <strong>trusted backend code</strong>, not a sandbox. Declared permissions control
+        which commands the frontend can route to; they do not restrict what the plugin's own Node code
+        may do.
+      </div>
+    </div>
+
+    <!-- 15 -->
+    <div class="tut">
+      <h3 id="tut-deeplinks">15. Deep links and file associations</h3>
+      <div class="platforms"><span class="plat win">Windows</span></div>
+      <p class="tut-goal"><strong>Goal:</strong> make <code>myapp://…</code> links and double-clicked
+      <code>.myapp</code> files open in your already-running app rather than starting a second copy.</p>
+      <ol class="steps">
+        <li>
+          <p>Turn on single-instance and declare what you handle. A stable <code>appId</code> is what
+          identifies the instance lock, so it must not change between releases.</p>
+          <div class="codewrap"><pre><code>const app = new App({
+  appId: "com.example.my-app",
+  entry: path.join(__dirname, "index.html"),
+  singleInstance: true,
+  protocols: ["my-app"],
+  fileAssociations: [".myapp"]
+});
+
+app.on("open-url",  ({ url, initial })  =&gt; console.log("URL:", url, { initial }));
+app.on("open-file", ({ path, initial }) =&gt; console.log("File:", path, { initial }));
+
+app.on("second-instance", ({ args, cwd }) =&gt; {
+  console.log("Relaunched with", args, "from", cwd);
+});
+
+const primary = app.run();
+if (!primary) {
+  // A duplicate launch. Do not force-exit here: it must stay alive
+  // long enough to hand its arguments to the primary instance.
+  return;
+}</code></pre><span class="lang">javascript</span></div>
+        </li>
+        <li>
+          <p>Mirror the same values in <code>package.json</code> so the installer registers them.</p>
+          <div class="codewrap"><pre><code>"nodeviewjs": {
+  "protocols": [{ "scheme": "my-app", "name": "My App URL" }],
+  "fileAssociations": [{ "extension": ".myapp", "name": "My App document" }]
+}</code></pre><span class="lang">json</span></div>
+        </li>
+        <li>
+          <p>Build and install, then test from anywhere:</p>
+          <div class="codewrap"><pre><code>npm run package:installer
+start my-app://open/report-42</code></pre><span class="lang">powershell</span></div>
+        </li>
+      </ol>
+      <div class="tut-result">
+        <strong>You should see</strong>
+        The existing window restored and the URL logged, with <code>initial: false</code> because it
+        arrived from a later launch. <code>initial: true</code> means the URL started the process.
+        <br><br>
+        Registration is the installer's job — a portable folder changes nothing in the registry. The
+        installer also refuses to steal a protocol another application already owns.
+      </div>
+    </div>
+
+    <!-- 16 -->
+    <div class="tut">
+      <h3 id="tut-package">16. Shipping it</h3>
+      <p class="tut-goal"><strong>Goal:</strong> turn the project into something you can hand to
+      someone: a portable folder, then a per-user installer.</p>
+      <ol class="steps">
+        <li>
+          <p>Describe the app in <code>package.json</code>. <code>name</code> becomes the folder and
+          executable name; <code>entry</code> is your backend file.</p>
+          <div class="codewrap"><pre><code>"nodeviewjs": {
+  "name": "MyApp",
+  "appId": "com.example.my-app",
+  "entry": "app.js",
+  "icon": "assets/app.ico",
+  "include": ["assets"],
+  "exclude": ["assets/private", "assets/private/*"],
+  "metadata": {
+    "companyName": "My Company",
+    "productName": "My App",
+    "copyright": "Copyright (C) 2026 My Company"
+  }
+}</code></pre><span class="lang">json</span></div>
+        </li>
+        <li>
+          <p>Build the portable folder and run it.</p>
+          <div class="codewrap"><pre><code>npm run package
+.\build\portable\MyApp\MyApp.exe</code></pre><span class="lang">powershell</span></div>
+        </li>
+        <li>
+          <p>Then produce the installer.</p>
+          <div class="codewrap"><pre><code>npm run package:installer</code></pre><span class="lang">powershell</span></div>
+        </li>
+        <li>
+          <p>Exe metadata is compiled into the launcher, so changing it needs a rebuild before
+          repackaging:</p>
+          <div class="codewrap"><pre><code>npm run build
+npm run package</code></pre><span class="lang">powershell</span></div>
+        </li>
+      </ol>
+      <div class="tut-result">
+        <strong>You should see</strong>
+        <code>build/portable/MyApp/</code> holding just <code>MyApp.exe</code> and
+        <code>resources/</code>, and
+        <code>build/installer/MyApp-&lt;version&gt;-setup.exe</code> installing under
+        <code>%LOCALAPPDATA%\Programs\MyApp</code> without asking for administrator rights.
+        <br><br>
+        Packaging refuses to ship <code>.env</code>, <code>.npmrc</code>, <code>*.pem</code>,
+        <code>*.key</code>, <code>*.pfx</code>, and similar files, and warns about credential-looking
+        strings in text inputs without printing the value it matched. If the app opens and closes
+        immediately, read <code>resources/MyApp.log</code>.
+      </div>
+    </div>
+
+    <!-- 17 -->
+    <div class="tut">
+      <h3 id="tut-updates">17. Signed updates</h3>
+      <p class="tut-goal"><strong>Goal:</strong> ship an update your app can verify before installing.
+      The manifest is Ed25519-signed and binds identity, version, URL, size, and hash together.</p>
+      <ol class="steps">
+        <li>
+          <p>Generate a key pair. Keep the private key outside the repository and out of CI logs.</p>
+          <div class="codewrap"><pre><code>node -e "const c=require('node:crypto');const{publicKey,privateKey}=c.generateKeyPairSync('ed25519');require('node:fs').writeFileSync('C:/secure/update-private.pem',privateKey.export({type:'pkcs8',format:'pem'}));console.log(publicKey.export({type:'spki',format:'pem'}))"</code></pre><span class="lang">powershell</span></div>
+        </li>
+        <li>
+          <p>Build the installer, then sign a manifest describing it.</p>
+          <div class="codewrap"><pre><code>npm run package:installer
+$env:NODEVIEW_UPDATE_PRIVATE_KEY = "C:\secure\update-private.pem"
+npx nodeviewjs update-manifest https://updates.example.com/MyApp-1.2.0-setup.exe</code></pre><span class="lang">powershell</span></div>
+        </li>
+        <li>
+          <p>Upload <code>build/installer/update.json</code> and the installer to HTTPS, then check for
+          updates from the backend using the public key you printed in step 1.</p>
+          <div class="codewrap"><pre><code>const { Updater } = require("nodeviewjs");
+
+const updater = new Updater({
+  appId: process.env.NODEVIEW_APP_ID,
+  currentVersion: process.env.NODEVIEW_APP_VERSION,
+  manifestUrl: "https://updates.example.com/update.json",
+  publicKey: PUBLIC_KEY_PEM
+});
+
+app.command("update:check", async () =&gt; {
+  const update = await updater.checkForUpdates();
+  if (!update) return { available: false };
+  await updater.downloadUpdate(update);
+  await updater.installAndRestart(app);
+  return { available: true };
+});</code></pre><span class="lang">javascript</span></div>
+        </li>
+      </ol>
+      <div class="tut-result">
+        <strong>You should see</strong>
+        The app download, verify, install, and relaunch itself. Checks reject unsigned metadata, a
+        mismatched app id, a non-HTTPS URL, a downgrade, unexpected fields, an oversized response, and
+        installer bytes that do not match the manifest hash.
+        <br><br>
+        Installation waits for the app and launcher to exit, re-verifies the installer, applies it
+        quietly, and restarts. Watch progress through the <code>checking</code>,
+        <code>update-available</code>, <code>update-downloaded</code>, <code>update-installing</code>,
+        and <code>updater-error</code> events.
+      </div>
+    </div>
+
+    <!-- 18 -->
+    <div class="tut">
+      <h3 id="tut-debug">18. Debugging</h3>
+      <p class="tut-goal"><strong>Goal:</strong> find out what is wrong when the window is blank, the
+      app exits instantly, or a command never answers.</p>
+      <ol class="steps">
+        <li>
+          <p>Check the environment first. <code>doctor</code> reports what is missing or misconfigured
+          before you start guessing.</p>
+          <div class="codewrap"><pre><code>npm run doctor</code></pre><span class="lang">powershell</span></div>
+        </li>
+        <li>
+          <p>Run with DevTools and live reload. Frontend <code>console.log</code> shows in DevTools;
+          backend <code>console.log</code> shows in your terminal.</p>
+          <div class="codewrap"><pre><code>npm run dev</code></pre><span class="lang">powershell</span></div>
+          <p>Frontend reloads keep the Node process alive, so <strong>restart dev mode after changing
+          backend code</strong>. Packaged Windows apps force DevTools off regardless of
+          <code>devtools: true</code>.</p>
+        </li>
+        <li>
+          <p>Read the logs when there is no console to watch.</p>
+          <div class="codewrap"><pre><code># packaged app launcher output
+build\portable\MyApp\resources\MyApp.log
+
+# structured backend errors
+%LOCALAPPDATA%\NodeViewJS\Logs\&lt;app-id&gt;-&lt;hash&gt;\backend.log</code></pre><span class="lang">text</span></div>
+          <p>Set <code>NODEVIEW_LOG_PATH</code> to capture the backend log at a path you choose.</p>
+        </li>
+        <li>
+          <p>Measure startup when launch feels slow.</p>
+          <div class="codewrap"><pre><code>const app = new App({ entry: "index.html", startupTiming: true });</code></pre><span class="lang">javascript</span></div>
+        </li>
+        <li>
+          <p>Run the suites when you change runtime behavior.</p>
+          <div class="codewrap"><pre><code>npm test              # unit, packaging, and CLI
+npm run test:full     # everything, including live WebView (Windows, interactive desktop)</code></pre><span class="lang">powershell</span></div>
+        </li>
+      </ol>
+      <div class="tut-result">
+        <strong>Common causes</strong>
+        A blank window usually means <code>entry</code> did not resolve — use
+        <code>path.join(__dirname, "index.html")</code>. An instant exit is almost always a backend
+        throw, recorded in the launcher log. A command that never resolves has hit the 30-second IPC
+        timeout, and a payload that will not cross the bridge is usually not JSON-safe: functions,
+        <code>BigInt</code>, <code>NaN</code>, class instances, and cyclic objects are all rejected.
+      </div>
+    </div>
 
     <!-- ============================================================ -->
     <h2 id="cli">CLI reference</h2>

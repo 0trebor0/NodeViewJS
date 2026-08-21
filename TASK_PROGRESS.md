@@ -113,6 +113,8 @@ Documentation:
 
 ## Files modified
 
+- `docs/index.html` — Tutorials section (18 walkthroughs) and its styling.
+
 - `runtime/app.js` — callback promise consumption, one shared dispatch path,
   isolated handler failures, window disposal and `lifecycleState`, unsubscribe
   cleanup, six-phase `quit()` with `before-quit` and `isQuitting`, response
@@ -174,6 +176,20 @@ None.
   handling.
 
 ## Tests run and results
+
+### Tutorials section in docs/index.html
+
+Documentation-only change to `docs/index.html`; no runtime code was touched, so the checks were
+scoped to that file and the repository surface rather than the full suite.
+
+- HTML structure check over the rendered document: `TAG BALANCE OK`; 91 real DOM ids with no
+  duplicates; 85 sidebar links and 18 tutorial-index links, 0 broken; 107 code blocks each with a
+  copy button; 48 tutorial steps; 0 stray elements inside `pre` (escaping intact).
+- Layout: no horizontal overflow at 1280px or at 375px; the tutorial index collapses to one column
+  on mobile.
+- `npm run security:repo` -> `Repository security scan passed.` (exit 0)
+
+### Earlier runtime and packaging work
 
 - `npm test` — 29 suites, all passed.
 - `npm run test:native` — all 8 live WebView suites passed.
